@@ -23,6 +23,7 @@ import {
     XCircle,
     AlertTriangle,
     Info,
+    Plus,
 } from 'lucide-react';
 import {
     Dialog,
@@ -41,6 +42,7 @@ import {
     getPdfDocumentsForGeneration,
     processAndUploadFile,
     deleteReferenceDocument,
+    saveReferenceDocument,
     type ReferenceDocument,
 } from '@/lib/reference-documents-service';
 
@@ -177,10 +179,15 @@ export default function TreatmentPlanGenerator({
 
     const [uploadProgress, setUploadProgress] = useState<{[id: string]: number}>({});
     const [uploadStage, setUploadStage] = useState<{[id: string]: string}>({});
+    const [uploadError, setUploadError] = useState<string | null>(null);
+    const [manualText, setManualText] = useState('');
+    const [manualTitle, setManualTitle] = useState('');
+    const [savingManual, setSavingManual] = useState(false);
 
     const handleUploadFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (!files || files.length === 0) return;
+        setUploadError(null);
 
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
@@ -195,7 +202,9 @@ export default function TreatmentPlanGenerator({
                         setUploadStage((prev) => ({ ...prev, [tempId]: stage }));
                     },
                 });
-            } catch (err) {
+            } catch (err: any) {
+                const msg = err?.message || 'Error desconocido';
+                setUploadError(`Error al procesar "${file.name}": ${msg}`);
                 console.error(`Error procesando ${file.name}:`, err);
             } finally {
                 setUploadProgress((prev) => { const next = { ...prev }; delete next[tempId]; return next; });
@@ -204,8 +213,34 @@ export default function TreatmentPlanGenerator({
         }
 
         await refreshDocs();
-        // Reset file input
         if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    const handleSaveManualText = async () => {
+        if (!manualText.trim()) return;
+        setSavingManual(true);
+        try {
+            const doc: ReferenceDocument = {
+                id: `ref-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                title: manualTitle.trim() || 'Referencia manual',
+                author: 'No especificado',
+                uploadedAt: new Date().toISOString(),
+                contentText: manualText.trim(),
+                fileName: '',
+                fileSize: manualText.length,
+                mimeType: 'text/plain',
+                tags: [],
+            };
+            await saveReferenceDocument(doc);
+            setManualText('');
+            setManualTitle('');
+            await refreshDocs();
+        } catch (err) {
+            console.error('Error guardando texto manual:', err);
+            setUploadError('Error al guardar el texto de referencia.');
+        } finally {
+            setSavingManual(false);
+        }
     };
 
     const handleDeleteDoc = async (id: string) => {
@@ -454,13 +489,14 @@ export default function TreatmentPlanGenerator({
                             Bibliografía de Referencia
                         </DialogTitle>
                         <DialogDescription>
-                            Carga documentos con bibliografía clínica para fundamentar el plan de tratamiento. Los PDFs se procesan con IA de Gemini para máxima calidad de lectura.
+                            Agrega documentos o pega texto de bibliografía clínica para fundamentar el plan de tratamiento.
                         </DialogDescription>
                     </DialogHeader>
 
-                    <div className="flex-1 overflow-y-auto space-y-4 py-2">
-                        {/* Upload Section */}
-                        <div className="space-y-2">
+                    <div className="flex-1 overflow-y-auto space-y-6 py-2">
+                        {/* ── Section 1: Upload Files ── */}
+                        <div className="space-y-3">
+                            <h4 className="text-sm font-semibold text-gray-700">Cargar Archivos</h4>
                             <input
                                 ref={fileInputRef}
                                 type="file"
@@ -468,26 +504,30 @@ export default function TreatmentPlanGenerator({
                                 multiple
                                 onChange={handleUploadFile}
                                 className="hidden"
-                                id="ref-file-upload"
                             />
-                            <label htmlFor="ref-file-upload">
-                                <Button
-                                    asChild
-                                    variant="outline"
-                                    className="w-full cursor-pointer"
-                                    disabled={Object.keys(uploadProgress).length > 0}
-                                >
-                                    <span>
-                                        <FileUp className="mr-2 h-4 w-4" />
-                                        {Object.keys(uploadProgress).length > 0
-                                            ? `Procesando... (${Object.keys(uploadProgress).length})`
-                                            : 'Cargar archivos (.txt, .md, .pdf)'}
-                                    </span>
-                                </Button>
-                            </label>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="w-full"
+                                disabled={Object.keys(uploadProgress).length > 0}
+                                onClick={() => fileInputRef.current?.click()}
+                            >
+                                <FileUp className="mr-2 h-4 w-4" />
+                                {Object.keys(uploadProgress).length > 0
+                                    ? `Procesando... (${Object.keys(uploadProgress).length})`
+                                    : 'Seleccionar archivos (.txt, .md, .csv, .json, .pdf)'}
+                            </Button>
                             <p className="text-xs text-gray-500">
-                                Compatible con: .txt, .md, .csv, .json, .pdf. Los PDFs se procesan con IA de Gemini.
+                                Compatible con archivos de texto y PDF. Los PDFs se procesan con IA de Gemini si tienes API Key configurada.
                             </p>
+
+                            {/* Upload Error */}
+                            {uploadError && (
+                                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                                    {uploadError}
+                                </div>
+                            )}
+
                             {/* Upload Progress Indicators */}
                             {Object.entries(uploadProgress).map(([id, pct]) => (
                                 <div key={id} className="space-y-1 p-3 bg-blue-50 border border-blue-200 rounded-lg">
@@ -507,61 +547,100 @@ export default function TreatmentPlanGenerator({
                             ))}
                         </div>
 
-                        {/* Documents List */}
-                        {referenceDocs.length > 0 ? (
+                        <Separator />
+
+                        {/* ── Section 2: Manual Text Entry ── */}
+                        <div className="space-y-3">
+                            <h4 className="text-sm font-semibold text-gray-700">Agregar Texto de Referencia</h4>
+                            <p className="text-xs text-gray-500">
+                                Pega directamente el contenido de un artículo, capítulo o guía clínica.
+                            </p>
                             <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-sm font-medium text-gray-700">
-                                        {referenceDocs.length} documento{referenceDocs.length !== 1 ? 's' : ''} cargado{referenceDocs.length !== 1 ? 's' : ''}
-                                    </span>
-                                    <span className="text-xs text-gray-500">
-                                        Total: {totalChars.toLocaleString()} caracteres
-                                    </span>
-                                </div>
-                                <div className="space-y-2 max-h-64 overflow-y-auto">
-                                    {referenceDocs.map((doc) => (
-                                        <div
-                                            key={doc.id}
-                                            className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border group"
-                                        >
-                                            <FileText className={`h-4 w-4 mt-0.5 shrink-0 ${doc.isPdf ? 'text-red-400' : 'text-gray-400'}`} />
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-medium text-gray-800 truncate">
-                                                    {doc.title}
-                                                </p>
-                                                <p className="text-xs text-gray-500">
-                                                    {doc.fileName} · {formatFileSize(doc.fileSize)}
-                                                    {doc.isPdf && ' · PDF'}
-                                                    {doc.pdfPageCount && ` · ${doc.pdfPageCount} págs.`}
-                                                    {doc.textExtractionMethod === 'native' && ' · Procesado por Gemini'}
-                                                    {doc.textExtractionMethod === 'pdfjs' && ` · ${doc.contentText.length.toLocaleString()} caracteres`}
-                                                    {!doc.isPdf && ` · ${doc.contentText.length.toLocaleString()} caracteres`}
-                                                </p>
-                                                {doc.author && doc.author !== 'No especificado' && (
-                                                    <p className="text-xs text-gray-400">Autor: {doc.author}</p>
-                                                )}
-                                            </div>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => handleDeleteDoc(doc.id)}
-                                                className="text-red-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                                <input
+                                    type="text"
+                                    placeholder="Título de la referencia (ej. Beck, 2011 - Terapia Cognitiva)"
+                                    value={manualTitle}
+                                    onChange={(e) => setManualTitle(e.target.value)}
+                                    className="w-full px-3 py-2 text-sm border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <Textarea
+                                    placeholder="Pega aquí el texto de la referencia bibliográfica..."
+                                    value={manualText}
+                                    onChange={(e) => setManualText(e.target.value)}
+                                    className="min-h-[120px] text-sm"
+                                />
+                                <Button
+                                    type="button"
+                                    onClick={handleSaveManualText}
+                                    disabled={savingManual || !manualText.trim()}
+                                    size="sm"
+                                >
+                                    {savingManual ? (
+                                        <><Loader2 className="mr-2 h-3 w-3 animate-spin" />Guardando...</>
+                                    ) : (
+                                        <><Plus className="mr-2 h-3 w-3" />Agregar Referencia</>
+                                    )}
+                                </Button>
+                            </div>
+                        </div>
+
+                        <Separator />
+
+                        {/* ── Section 3: Documents List ── */}
+                        <div className="space-y-3">
+                            <h4 className="text-sm font-semibold text-gray-700">Documentos Cargados</h4>
+                            {referenceDocs.length > 0 ? (
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs text-gray-500">
+                                            {referenceDocs.length} documento{referenceDocs.length !== 1 ? 's' : ''}
+                                        </span>
+                                        <span className="text-xs text-gray-500">
+                                            Total: {totalChars.toLocaleString()} caracteres
+                                        </span>
+                                    </div>
+                                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                                        {referenceDocs.map((doc) => (
+                                            <div
+                                                key={doc.id}
+                                                className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border group"
                                             >
-                                                <Trash2 className="h-3.5 w-3.5" />
-                                            </Button>
-                                        </div>
-                                    ))}
+                                                <FileText className={`h-4 w-4 mt-0.5 shrink-0 ${doc.isPdf ? 'text-red-400' : 'text-gray-400'}`} />
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-medium text-gray-800 truncate">
+                                                        {doc.title}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500">
+                                                        {doc.fileName && `${doc.fileName} · `}
+                                                        {formatFileSize(doc.fileSize)}
+                                                        {doc.isPdf && ' · PDF'}
+                                                        {doc.pdfPageCount && ` · ${doc.pdfPageCount} págs.`}
+                                                        {doc.textExtractionMethod === 'native' && ' · Procesado por Gemini'}
+                                                        {!doc.fileName && !doc.isPdf && ` · Texto manual`}
+                                                    </p>
+                                                </div>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => handleDeleteDoc(doc.id)}
+                                                    className="text-red-400 hover:text-red-600 hover:bg-red-50 opacity-100 shrink-0"
+                                                >
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                </Button>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
-                        ) : (
-                            <div className="text-center py-8 text-gray-400">
-                                <BookOpen className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                                <p className="text-sm">No hay documentos de referencia cargados.</p>
-                                <p className="text-xs mt-1">
-                                    La IA generará el plan basándose únicamente en los datos clínicos disponibles.
-                                </p>
-                            </div>
-                        )}
+                            ) : (
+                                <div className="text-center py-6 text-gray-400">
+                                    <BookOpen className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                                    <p className="text-sm">No hay documentos de referencia.</p>
+                                    <p className="text-xs mt-1">
+                                        Carga un archivo o pega texto para agregar bibliografía.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     <DialogFooter>

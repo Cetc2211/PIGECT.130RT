@@ -1,13 +1,13 @@
-// Fixed model: gemini-2.0-flash (current stable model)
-export const DEFAULT_MODEL = 'gemini-2.0-flash';
+// Fixed model: gemini-1.0-pro (user-specified)
+export const DEFAULT_MODEL = 'gemini-1.0-pro';
 
-// Model aliases - map older model names to current model
+// Model aliases
 const ALIAS_PAIRS: Array<[string, string]> = [
-  ['gemini-1.0-pro', 'gemini-2.0-flash'],
-  ['gemini-pro', 'gemini-2.0-flash'],
-  ['gemini-1.5-pro', 'gemini-2.0-flash'],
-  ['gemini-1.5-flash', 'gemini-2.0-flash'],
-  ['gemini-2.0-flash', 'gemini-2.0-flash'],
+  ['gemini-pro', 'gemini-1.0-pro'],
+  ['gemini-1.0-pro', 'gemini-1.0-pro'],
+  ['gemini-1.5-pro', 'gemini-1.0-pro'],
+  ['gemini-1.5-flash', 'gemini-1.0-pro'],
+  ['gemini-2.0-flash', 'gemini-1.0-pro'],
 ];
 
 const aliasMap = ALIAS_PAIRS.reduce<Record<string, string>>((acc, [alias, canonical]) => {
@@ -38,13 +38,13 @@ export function describeModel(model: string): string {
 }
 
 export const FALLBACK_MODELS: string[] = [
+  'gemini-1.0-pro',
+  'gemini-pro',
   'gemini-2.0-flash',
-  'gemini-2.5-flash-preview-05-20',
-  'gemini-1.5-flash',
 ];
 
 export const MODEL_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (recomendado)' },
-  { value: 'gemini-2.5-flash-preview-05-20', label: 'Gemini 2.5 Flash (experimental)' },
-  { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
+  { value: 'gemini-1.0-pro', label: 'Gemini 1.0 Pro (seleccionado)' },
+  { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (alternativa rápida)' },
+  { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro (alternativa)' },
 ];
