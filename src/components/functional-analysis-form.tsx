@@ -9,13 +9,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { FunctionalAnalysis } from '@/lib/store';
+import { saveFunctionalAnalysis } from '@/lib/storage-local';
 
 interface FunctionalAnalysisFormProps {
     studentName: string;
+    studentId: string;
     initialData?: FunctionalAnalysis;
 }
 
-export default function FunctionalAnalysisForm({ studentName, initialData }: FunctionalAnalysisFormProps) {
+export default function FunctionalAnalysisForm({ studentName, studentId, initialData }: FunctionalAnalysisFormProps) {
+    const [saving, setSaving] = useState(false);
+    const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [formData, setFormData] = useState({
         antecedent: initialData?.analisis_funcional.antecedente_principal || '',
         behavior: initialData?.analisis_funcional.conducta_problema || '',
@@ -45,21 +49,31 @@ export default function FunctionalAnalysisForm({ studentName, initialData }: Fun
 
     const handleSubmit = (event: React.FormEvent) => {
         event.preventDefault();
+        setSaving(true);
+        setSaveStatus('idle');
 
-        const analysisData = {
-            studentId: 'S001', // ID de estudiante (debe ser dinámico en una app real)
-            session_number: (initialData?.session_number || 0) + 1,
-            fecha_sesion: new Date().toISOString(),
-            analisis_funcional: {
-                antecedente_principal: formData.antecedent,
-                conducta_problema: formData.behavior,
-                funcion_mantenimiento: formData.consequence,
-                creencia_esquema: formData.cognitiveSchema,
-            }
-        };
+        try {
+            const analysisData = {
+                studentId,
+                session_number: (initialData?.session_number || 0) + 1,
+                fecha_sesion: new Date().toISOString(),
+                analisis_funcional: {
+                    antecedente_principal: formData.antecedent,
+                    conducta_problema: formData.behavior,
+                    funcion_mantenimiento: formData.consequence,
+                    creencia_esquema: formData.cognitiveSchema,
+                },
+            };
 
-        console.log("Guardando en 'session_data':", analysisData);
-        alert("Análisis Funcional guardado (simulación). Revisa la consola para ver los datos enviados.");
+            saveFunctionalAnalysis(analysisData);
+            setSaveStatus('success');
+            console.log('Análisis Funcional guardado correctamente:', analysisData);
+        } catch (err) {
+            console.error('Error al guardar Análisis Funcional:', err);
+            setSaveStatus('error');
+        } finally {
+            setSaving(false);
+        }
     };
 
     return (
@@ -117,9 +131,15 @@ export default function FunctionalAnalysisForm({ studentName, initialData }: Fun
                         </div>
                     </div>
                     
-                    <div className="flex justify-end pt-4">
-                        <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold">
-                           Actualizar Análisis Funcional
+                    <div className="flex justify-end items-center gap-3 pt-4">
+                        {saveStatus === 'success' && (
+                            <span className="text-sm text-green-600 font-medium">Guardado correctamente</span>
+                        )}
+                        {saveStatus === 'error' && (
+                            <span className="text-sm text-red-600 font-medium">Error al guardar</span>
+                        )}
+                        <Button type="submit" disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white font-bold">
+                            {saving ? 'Guardando...' : 'Actualizar Análisis Funcional'}
                         </Button>
                     </div>
                 </form>

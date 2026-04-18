@@ -358,14 +358,50 @@ export function getEvaluations(): Evaluation[] {
 
 // --- NUEVAS FUNCIONES PARA OBTENER DATOS DE SEGUIMIENTO ---
 export function getClinicalAssessmentByStudentId(studentId: string): ClinicalAssessment | undefined {
+    // First check localStorage (user-saved data takes priority)
+    if (typeof window !== 'undefined') {
+        try {
+            const stored = localStorage.getItem('pigec_clinical_assessments');
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                const found = Array.isArray(parsed) ? parsed.find((a: any) => a.studentId === studentId) : null;
+                if (found) return found as ClinicalAssessment;
+            }
+        } catch { /* ignore */ }
+    }
+    // Fallback to demo data
     return clinicalAssessmentsDB.find(a => a.studentId === studentId);
 }
 
 export function getFunctionalAnalysisByStudentId(studentId: string): FunctionalAnalysis | undefined {
+    // First check localStorage (user-saved data takes priority)
+    if (typeof window !== 'undefined') {
+        try {
+            const stored = localStorage.getItem('pigec_functional_analyses');
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                const found = Array.isArray(parsed) ? parsed.find((a: any) => a.studentId === studentId) : null;
+                if (found) return found as FunctionalAnalysis;
+            }
+        } catch { /* ignore */ }
+    }
+    // Fallback to demo data
     return functionalAnalysesDB.find(a => a.studentId === studentId);
 }
 
 export function getTreatmentPlanByStudentId(studentId: string): TreatmentPlan | undefined {
+    // First check localStorage (user-saved data takes priority)
+    if (typeof window !== 'undefined') {
+        try {
+            const stored = localStorage.getItem('pigec_treatment_plans');
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                const found = Array.isArray(parsed) ? parsed.find((p: any) => p.studentId === studentId) : null;
+                if (found) return found as TreatmentPlan;
+            }
+        } catch { /* ignore */ }
+    }
+    // Fallback to demo data
     return treatmentPlansDB.find(a => a.studentId === studentId);
 }
 

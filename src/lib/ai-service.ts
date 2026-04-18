@@ -29,7 +29,7 @@ export async function generateTextWithUserKey(prompt: string): Promise<string> {
   }
 
   const client = new GoogleGenerativeAI(apiKey);
-  const model = client.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = client.getGenerativeModel({ model: 'gemini-2.0-flash' });
   const response = await model.generateContent(prompt);
   return response.response.text() || '';
 }
@@ -98,7 +98,7 @@ export async function generateClinicalPlan(
 
     const client = new GoogleGenerativeAI(apiKey);
     const model = client.getGenerativeModel({
-        model: 'gemini-1.5-flash',
+        model: 'gemini-2.0-flash',
         systemInstruction: CLINICAL_SYSTEM_PROMPT,
         generationConfig: {
             temperature: options?.temperature ?? 0.4,

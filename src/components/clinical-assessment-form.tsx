@@ -12,7 +12,7 @@ import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from "@/lib/firebase";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { AlertTriangle, CheckCircle2, Clock, FileText, Loader2 } from "lucide-react";
-import { getTestResults } from '@/lib/storage-local';
+import { getTestResults, saveClinicalAssessment } from '@/lib/storage-local';
 import type { Expediente } from '@/lib/expediente-service';
 
 interface ClinicalAssessmentFormProps {
@@ -173,6 +173,8 @@ function mergeByCanonicalLatest(results: TestResult[]): TestResult[] {
 
 export default function ClinicalAssessmentForm({ initialData, studentId, expediente }: ClinicalAssessmentFormProps) {
     const [user, authLoading] = useAuthState(auth);
+    const [saving, setSaving] = useState(false);
+    const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
     // Cargar resultados de pruebas desde Firestore
     const [testResults, setTestResults] = useState<TestResult[]>([]);
@@ -332,27 +334,37 @@ export default function ClinicalAssessmentForm({ initialData, studentId, expedie
 
     const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
+        setSaving(true);
+        setSaveStatus('idle');
         
-        const formData = new FormData(event.currentTarget);
-        const effectiveStudentId = studentId || 'S001';
-        const data: Omit<ClinicalAssessment, 'fecha_evaluacion'> = {
-            studentId: effectiveStudentId,
-            bdi_ii_score: Number(formData.get('bdi_score')),
-            bai_score: Number(formData.get('bai_score')),
-            riesgo_suicida_beck_score: Number(formData.get('beck_suicide_score')),
-            neuro_mt_score: Number(formData.get('mt_index')),
-            neuro_as_score: Number(formData.get('as_index')),
-            neuro_vp_score: Number(formData.get('vp_index')),
-            contexto_carga_cognitiva: formData.get('cognitive_load_context') as string,
-            assist_result: formData.get('assist_result') as string,
-            conducta_autolesiva_score: Number(formData.get('self_harm_score')),
-            impresion_diagnostica: formData.get('diagnostic_impression') as string,
-        };
+        try {
+            const formData = new FormData(event.currentTarget);
+            const effectiveStudentId = studentId || 'S001';
+            const data: Omit<ClinicalAssessment, 'fecha_evaluacion'> = {
+                studentId: effectiveStudentId,
+                bdi_ii_score: Number(formData.get('bdi_score')),
+                bai_score: Number(formData.get('bai_score')),
+                riesgo_suicida_beck_score: Number(formData.get('beck_suicide_score')),
+                neuro_mt_score: Number(formData.get('mt_index')),
+                neuro_as_score: Number(formData.get('as_index')),
+                neuro_vp_score: Number(formData.get('vp_index')),
+                contexto_carga_cognitiva: formData.get('cognitive_load_context') as string,
+                assist_result: formData.get('assist_result') as string,
+                conducta_autolesiva_score: Number(formData.get('self_harm_score')),
+                impresion_diagnostica: formData.get('diagnostic_impression') as string,
+            };
 
-        const finalData = { ...data, fecha_evaluacion: new Date().toISOString() };
+            const finalData = { ...data, fecha_evaluacion: new Date().toISOString() };
 
-        console.log("Guardando en 'clinical_assessments':", finalData);
-        alert("Perfil Clínico y Evaluación guardados (simulación). Revisa la consola.");
+            saveClinicalAssessment(finalData as any);
+            setSaveStatus('success');
+            console.log('Perfil Clínico y Evaluación guardado correctamente:', finalData);
+        } catch (err) {
+            console.error('Error al guardar Perfil Clínico:', err);
+            setSaveStatus('error');
+        } finally {
+            setSaving(false);
+        }
     };
 
     return (
@@ -575,9 +587,15 @@ export default function ClinicalAssessmentForm({ initialData, studentId, expedie
                         </div>
 
 
-                        <div className="flex justify-end pt-4">
-                            <Button type="submit" className="bg-pink-600 hover:bg-pink-700 text-white font-bold">
-                                Actualizar Evaluación Clínica
+                        <div className="flex justify-end items-center gap-3 pt-4">
+                            {saveStatus === 'success' && (
+                                <span className="text-sm text-green-600 font-medium">Guardado correctamente</span>
+                            )}
+                            {saveStatus === 'error' && (
+                                <span className="text-sm text-red-600 font-medium">Error al guardar</span>
+                            )}
+                            <Button type="submit" disabled={saving} className="bg-pink-600 hover:bg-pink-700 text-white font-bold">
+                                {saving ? 'Guardando...' : 'Actualizar Evaluación Clínica'}
                             </Button>
                         </div>
                     </form>

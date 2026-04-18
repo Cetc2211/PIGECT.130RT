@@ -6,6 +6,9 @@ const OFFICIAL_GROUPS_KEY = 'pigec_official_groups';
 const WHATSAPP_IMPORTS_KEY = 'pigec_whatsapp_imports';
 const EVALUATION_SESSIONS_KEY = 'pigec_evaluation_sessions';
 const TEST_RESULTS_KEY = 'pigec_test_results';
+const CLINICAL_ASSESSMENTS_KEY = 'pigec_clinical_assessments';
+const FUNCTIONAL_ANALYSES_KEY = 'pigec_functional_analyses';
+const TREATMENT_PLANS_KEY = 'pigec_treatment_plans';
 
 type StoredExpediente = {
   id?: string;
@@ -182,4 +185,124 @@ export function saveTestResultLocal(result: StoredTestResult): void {
   }
 
   localStorage.setItem(TEST_RESULTS_KEY, JSON.stringify(current));
+}
+
+// ─── CLINICAL ASSESSMENTS (localStorage) ─────────────────────────────────────
+
+type StoredClinicalAssessment = {
+  id?: string;
+  studentId: string;
+  fecha_evaluacion: string;
+  bdi_ii_score: number;
+  bai_score: number;
+  riesgo_suicida_beck_score: number;
+  neuro_mt_score: number;
+  neuro_as_score: number;
+  neuro_vp_score: number;
+  contexto_carga_cognitiva: string;
+  assist_result: string;
+  conducta_autolesiva_score: number;
+  impresion_diagnostica: string;
+  [key: string]: unknown;
+};
+
+export function getClinicalAssessments<T = StoredClinicalAssessment>(): T[] {
+  if (!isBrowser()) return [];
+  return safeParseArray<T>(localStorage.getItem(CLINICAL_ASSESSMENTS_KEY));
+}
+
+export function getClinicalAssessmentByStudentId(studentId: string): StoredClinicalAssessment | undefined {
+  const all = getClinicalAssessments<StoredClinicalAssessment>();
+  return all.find((a) => a.studentId === studentId);
+}
+
+export function saveClinicalAssessment(assessment: StoredClinicalAssessment): void {
+  if (!isBrowser()) return;
+
+  const current = getClinicalAssessments<StoredClinicalAssessment>();
+  const matchIndex = current.findIndex((item) => item.studentId === assessment.studentId);
+
+  if (matchIndex >= 0) {
+    current[matchIndex] = { ...current[matchIndex], ...assessment };
+  } else {
+    current.push(assessment);
+  }
+
+  localStorage.setItem(CLINICAL_ASSESSMENTS_KEY, JSON.stringify(current));
+}
+
+// ─── FUNCTIONAL ANALYSES (localStorage) ───────────────────────────────────────
+
+type StoredFunctionalAnalysis = {
+  id?: string;
+  studentId: string;
+  session_number: number;
+  fecha_sesion: string;
+  analisis_funcional: {
+    antecedente_principal: string;
+    conducta_problema: string;
+    funcion_mantenimiento: string;
+    creencia_esquema: string;
+  };
+  [key: string]: unknown;
+};
+
+export function getFunctionalAnalyses<T = StoredFunctionalAnalysis>(): T[] {
+  if (!isBrowser()) return [];
+  return safeParseArray<T>(localStorage.getItem(FUNCTIONAL_ANALYSES_KEY));
+}
+
+export function getFunctionalAnalysisByStudentId(studentId: string): StoredFunctionalAnalysis | undefined {
+  const all = getFunctionalAnalyses<StoredFunctionalAnalysis>();
+  return all.find((a) => a.studentId === studentId);
+}
+
+export function saveFunctionalAnalysis(analysis: StoredFunctionalAnalysis): void {
+  if (!isBrowser()) return;
+
+  const current = getFunctionalAnalyses<StoredFunctionalAnalysis>();
+  const matchIndex = current.findIndex((item) => item.studentId === analysis.studentId);
+
+  if (matchIndex >= 0) {
+    current[matchIndex] = { ...current[matchIndex], ...analysis };
+  } else {
+    current.push(analysis);
+  }
+
+  localStorage.setItem(FUNCTIONAL_ANALYSES_KEY, JSON.stringify(current));
+}
+
+// ─── TREATMENT PLANS (localStorage) ───────────────────────────────────────────
+
+type StoredTreatmentPlan = {
+  id?: string;
+  studentId: string;
+  fecha_aprobacion: string;
+  plan_narrativo_final: string;
+  [key: string]: unknown;
+};
+
+export function getTreatmentPlans<T = StoredTreatmentPlan>(): T[] {
+  if (!isBrowser()) return [];
+  return safeParseArray<T>(localStorage.getItem(TREATMENT_PLANS_KEY));
+}
+
+export function getTreatmentPlanByStudentId(studentId: string): StoredTreatmentPlan | undefined {
+  const all = getTreatmentPlans<StoredTreatmentPlan>();
+  return all.find((p) => p.studentId === studentId);
+}
+
+export function saveTreatmentPlan(plan: StoredTreatmentPlan): void {
+  if (!isBrowser()) return;
+
+  const current = getTreatmentPlans<StoredTreatmentPlan>();
+  const matchIndex = current.findIndex((item) => item.studentId === plan.studentId);
+
+  if (matchIndex >= 0) {
+    current[matchIndex] = { ...current[matchIndex], ...plan };
+  } else {
+    current.push(plan);
+  }
+
+  localStorage.setItem(TREATMENT_PLANS_KEY, JSON.stringify(current));
 }
