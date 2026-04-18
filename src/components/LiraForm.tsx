@@ -8,7 +8,6 @@ import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CheckCircle2, Save, RotateCcw, AlertTriangle } from "lucide-react";
 import { db } from '@/lib/firebase';
-import { collection, addDoc, Timestamp } from 'firebase/firestore';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "./ui/input";

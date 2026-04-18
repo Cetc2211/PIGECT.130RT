@@ -2,7 +2,6 @@
 
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
-import { useAuthState } from 'react-firebase-hooks/auth';
 import { useSession } from '@/context/SessionContext';
 import { calculateRisk } from '@/lib/risk-analysis';
 import RiskIndicator from '@/components/RiskIndicator';
@@ -56,10 +55,7 @@ import {
   MessageSquareCode,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { auth, db } from '@/lib/firebase';
-import { collection, getDocs, query, where } from 'firebase/firestore';
 import { getOfficialGroupStructures, saveExpedienteLocal, saveImportedWhatsAppEvaluation } from '@/lib/storage-local';
-import { hasLocalAccessProfile } from '@/lib/local-access';
 import { decodeEvaluationPayload } from '@/lib/data-utils';
 import {
   getExpedientes as getExpedientesService,
@@ -107,19 +103,15 @@ const testNames: Record<string, string> = {
 
 export default function ExpedientesPage() {
   const { role } = useSession();
-  const [user, authLoading] = useAuthState(auth);
   const { toast } = useToast();
   const [filtro, setFiltro] = useState<FiltroExpediente>('todos');
   const [busqueda, setBusqueda] = useState('');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  // Counter para forzar recálculo de la lista al crear/borrar expedientes
   const [listVersion, setListVersion] = useState(0);
-  const [evaluacionesFirestore, setEvaluacionesFirestore] = useState<Record<string, number>>({});
   const [expedientesRemotos, setExpedientesRemotos] = useState<Expediente[]>([]);
   const [filtroGrupoOficial, setFiltroGrupoOficial] = useState<string>('todos');
   const [gruposOficiales, setGruposOficiales] = useState<Array<{ id: string; name: string }>>([]);
-  const [localOnlyMode, setLocalOnlyMode] = useState(false);
   const [whatsAppCodeInput, setWhatsAppCodeInput] = useState('');
   const [isImportingWhatsApp, setIsImportingWhatsApp] = useState(false);
   const [whatsAppImportSummary, setWhatsAppImportSummary] = useState<string | null>(null);
@@ -157,109 +149,16 @@ export default function ExpedientesPage() {
   }, [expedientes, busqueda, filtroGrupoOficial]);
 
   React.useEffect(() => {
-    if (typeof window === 'undefined') return;
-    setLocalOnlyMode(hasLocalAccessProfile());
-  }, []);
-
-  React.useEffect(() => {
     setGruposOficiales(getOfficialGroupStructures());
   }, []);
 
   React.useEffect(() => {
-    const syncExpedientesRemotos = async () => {
-      if (authLoading) {
-        return;
-      }
+    // 100% local mode — load expedientes from localStorage
+    const localesConDemo = getExpedientesService('todos');
+    setExpedientesRemotos(localesConDemo);
+  }, [listVersion]);
 
-      if (localOnlyMode || !db || !user) {
-        const localesConDemo = getExpedientesService('todos');
-        setExpedientesRemotos(localesConDemo);
-        return;
-      }
-
-      try {
-        const coleccionesCandidatas = ['expedientes', 'alumnos', 'students'];
-        const remotosNormalizados: Expediente[] = [];
-
-        for (const nombreColeccion of coleccionesCandidatas) {
-          const snap = await getDocs(collection(db, nombreColeccion));
-
-          const remotosColeccion: Expediente[] = snap.docs.map((docSnap) => {
-            const data = docSnap.data() as Partial<Expediente> & Record<string, any>;
-
-            return {
-              id: data.id || docSnap.id,
-              studentId: data.studentId || data.expedienteId || docSnap.id,
-              studentName: data.studentName || data.nombreCompleto || data.name || 'Sin nombre',
-              groupName: data.groupName || data.grupoNombre || data.group || 'Sin grupo',
-              semester: Number(data.semester || data.semestre || 1),
-              nivel: (data.nivel as any) || 'nivel_1',
-              estado: (data.estado as any) || 'abierto',
-              origen: (data.origen as any) || 'evaluacion_clinica',
-              fechaCreacion: data.fechaCreacion || new Date().toISOString(),
-              fechaActualizacion: data.fechaActualizacion || new Date().toISOString(),
-              creadoPor: data.creadoPor || 'sistema',
-              academicData: {
-                gpa: Number(data.academicData?.gpa || data.gpa || 0),
-                absences: Number(data.academicData?.absences || data.absences || 0),
-              },
-              fichaIdentificacion: data.fichaIdentificacion,
-              ansiedadScore: typeof data.ansiedadScore === 'number' ? data.ansiedadScore : undefined,
-              suicideRiskLevel: data.suicideRiskLevel,
-              irc: typeof data.irc === 'number' ? data.irc : undefined,
-              nivelRiesgo: data.nivelRiesgo,
-              evaluaciones: Array.isArray(data.evaluaciones) ? data.evaluaciones : [],
-              notas: Array.isArray(data.notas) ? data.notas : [],
-            };
-          });
-
-          remotosNormalizados.push(...remotosColeccion);
-        }
-
-        // Elimina duplicados entre colecciones candidatas.
-        const byStudentId = new Map<string, Expediente>();
-        remotosNormalizados.forEach((exp) => byStudentId.set(exp.studentId, exp));
-
-        setExpedientesRemotos(Array.from(byStudentId.values()));
-      } catch (err) {
-        console.error('Error cargando expedientes remotos:', err);
-      }
-    };
-
-    syncExpedientesRemotos();
-  }, [authLoading, listVersion, localOnlyMode, user]);
-
-  React.useEffect(() => {
-    const syncEvaluaciones = async () => {
-      if (authLoading) {
-        return;
-      }
-
-      if (localOnlyMode || !db || !user || expedientes.length === 0) {
-        setEvaluacionesFirestore({});
-        return;
-      }
-
-      const idsUnicos = Array.from(new Set(expedientes.map((e) => e.studentId).filter(Boolean)));
-      const conteos: Record<string, number> = {};
-
-      await Promise.all(
-        idsUnicos.map(async (studentId) => {
-          try {
-            const q = query(collection(db, 'test_results'), where('studentId', '==', studentId));
-            const snap = await getDocs(q);
-            conteos[studentId] = snap.size;
-          } catch (err) {
-            console.error(`Error sincronizando evaluaciones de ${studentId}:`, err);
-          }
-        })
-      );
-
-      setEvaluacionesFirestore(conteos);
-    };
-
-    syncEvaluaciones();
-  }, [authLoading, expedientes, localOnlyMode, user]);
+  // Evaluaciones count is now derived from expedientes.evaluaciones.length (local)
 
   /** Validar campos obligatorios de la Ficha de Identificación */
   const validateFicha = (): boolean => {
@@ -335,7 +234,7 @@ export default function ExpedientesPage() {
         origen: 'registro_manual' as OrigenExpediente,
         fechaCreacion: ahora,
         fechaActualizacion: ahora,
-        creadoPor: user?.email || 'usuario@local',
+        creadoPor: 'usuario@local',
         academicData: {
           gpa: 0,
           absences: 0,
@@ -714,7 +613,7 @@ export default function ExpedientesPage() {
                         expediente.nivelRiesgo?.includes('Amarillo') ? 'yellow' : 'green';
                     }
 
-                    const evaluacionesReales = evaluacionesFirestore[expediente.studentId] ?? expediente.evaluaciones.length;
+                    const evaluacionesReales = expediente.evaluaciones.length;
 
                     const linkHref =
                       role === 'Clinico'

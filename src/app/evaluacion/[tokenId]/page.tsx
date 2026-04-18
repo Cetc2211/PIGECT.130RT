@@ -13,8 +13,6 @@ import {
     ArrowRight, FileText, User, Shield, Check, AlertCircle, 
     CreditCard, Loader2, LogOut, ChevronRight, CheckCircle2
 } from 'lucide-react';
-import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs, doc, getDoc, Timestamp } from 'firebase/firestore';
 import { validarMatricula, type MatriculaRegistro } from '@/lib/matricula-service';
 import { encodeEvaluationPayload } from '@/lib/data-utils';
 import { getEvaluationSessionById } from '@/lib/storage-local';
@@ -214,72 +212,10 @@ export default function EvaluacionPage() {
                 return;
             }
 
-            if (!db) {
+            if (!localSession) {
                 fallbackFromQueryParams();
                 return;
             }
-
-            try {
-                // Intentar 1: leer directamente por ID de documento (más eficiente)
-                let docSnap = await getDoc(doc(db, 'evaluation_sessions', tokenId));
-                
-                // Intentar 2: si no existe por ID, buscar por campo 'id' (compatibilidad con addDoc anterior)
-                if (!docSnap.exists()) {
-                    const q = query(
-                        collection(db, 'evaluation_sessions'),
-                        where('id', '==', tokenId)
-                    );
-                    const snapshot = await getDocs(q);
-                    if (!snapshot.empty) {
-                        docSnap = snapshot.docs[0];
-                    }
-                }
-
-                if (!docSnap.exists()) {
-                    fallbackFromQueryParams();
-                    return;
-                } else {
-                    const data = docSnap.data();
-                    const sessionMode = data.mode || 'group';
-                    
-                    setSession({
-                        id: data.id,
-                        name: data.name,
-                        tests: data.tests || [],
-                        groups: data.groups || [],
-                        status: data.status,
-                        mode: sessionMode,
-                        studentId: data.studentId || data.expedienteId,
-                        studentName: data.studentName,
-                        expedienteId: data.expedienteId,
-                        expiresAt: data.expiresAt?.toDate()
-                    });
-
-                    // Si es modo individual, saltar matrícula e ir directo a consentimiento
-                    if (sessionMode === 'individual') {
-                        setStep('consentimiento');
-                    }
-                }
-            } catch (err: any) {
-                console.error('Error cargando sesión:', err);
-                const firebaseError = err?.message || '';
-                if (firebaseError.includes('Missing or insufficient permissions') || firebaseError.includes('PERMISSION_DENIED')) {
-                    fallbackFromQueryParams();
-                    return;
-                } else if (
-                    firebaseError.includes('network') ||
-                    firebaseError.includes('fetch') ||
-                    firebaseError.includes('offline') ||
-                    firebaseError.includes('client is offline') ||
-                    firebaseError.includes('Failed to get document because the client is offline')
-                ) {
-                    fallbackFromQueryParams();
-                    return;
-                } else {
-                    setError(`Error al cargar la sesión: ${firebaseError || 'Error desconocido'}`);
-                }
-            }
-            setLoading(false);
         };
 
         loadSession();

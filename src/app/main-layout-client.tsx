@@ -60,14 +60,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import Image from 'next/image';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth, db } from '@/lib/firebase';
-import { signOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useState } from 'react';
-import { ConnectionStatus } from '@/components/connection-status';
-import { TEMPORARY_AUTH_BYPASS, TEMPORARY_ACCESS_EMAIL } from '@/lib/auth-bypass';
+import { TEMPORARY_ACCESS_EMAIL } from '@/lib/auth-bypass';
 
 const navItems = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -96,7 +91,9 @@ const defaultSettings = {
 
 export default function MainLayoutClient({ children }: { children: React.ReactNode }) {
   const { toast } = useToast();
-  const [user, isAuthLoading] = useAuthState(auth);
+  // 100% local mode — no Firebase auth
+  const user = { uid: 'local-user', email: TEMPORARY_ACCESS_EMAIL, photoURL: '' };
+  const isAuthLoading = false;
   const { isAdmin, loading: loadingAdmin } = useAdmin();
   const { officialGroups, settings, syncStatus, activeGroup, activePartialId, isLoading: isDataLoading, unreadAnnouncementsCount } = useData();
   const pathname = usePathname();
@@ -107,59 +104,10 @@ export default function MainLayoutClient({ children }: { children: React.ReactNo
   const effectivePhoto = settings.teacherPhoto || user?.photoURL || '';
 
   useEffect(() => {
-    const checkRole = async () => {
-        if (TEMPORARY_AUTH_BYPASS) {
-            setIsTrackingManager(true);
-            setIsTutor(true);
-            return;
-        }
-
-        if (!user || !user.email || loadingAdmin) return;
-        
-        // Admin siempre tiene acceso
-        if (isAdmin) {
-             setIsTrackingManager(true);
-             setIsTutor(true); // Admin también ve tutoría
-             return;
-        }
-
-        // Verificar si es Tutor
-        if (officialGroups && officialGroups.length > 0) {
-            const isAssignedTutor = officialGroups.some(og => og.tutorEmail?.toLowerCase() === user.email?.toLowerCase());
-            setIsTutor(isAssignedTutor);
-        } else {
-             setIsTutor(false);
-        }
-
-        try {
-            const docRef = doc(db, 'app_config', 'roles');
-            const docSnap = await getDoc(docRef);
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                const managers = data.tracking_managers || [];
-                // Check if user email is in the list (case insensitive)
-                if (managers.some((email: string) => email.toLowerCase() === user.email?.toLowerCase())) {
-                    setIsTrackingManager(true);
-                } else {
-                    setIsTrackingManager(false);
-                }
-            } else {
-                setIsTrackingManager(false);
-            }
-        } catch (e) {
-            console.error("Error checking roles:", e);
-        }
-    }
-    
-    if (TEMPORARY_AUTH_BYPASS) {
-        checkRole();
-        return;
-    }
-
-    if (!isAuthLoading) {
-        checkRole();
-    }
-  }, [user, isAuthLoading, officialGroups, loadingAdmin, isAdmin]);
+    // Local mode — all roles enabled
+    setIsTrackingManager(true);
+    setIsTutor(true);
+  }, []);
 
   const filteredNavItems = navItems.filter(item => {
     // Seguimiento visible para todos (docentes ven sus reportes, encargados ven todo)
@@ -174,34 +122,18 @@ export default function MainLayoutClient({ children }: { children: React.ReactNo
 
 
   useEffect(() => {
-    if (TEMPORARY_AUTH_BYPASS) {
-      if (pathname === '/login' || pathname === '/signup') {
-        router.replace('/dashboard');
-      }
-      return;
+    // Local mode — redirect login/signup to dashboard
+    if (pathname === '/login' || pathname === '/signup') {
+      router.replace('/dashboard');
     }
-
-    if (!isAuthLoading) {
-        if (user) {
-            // Si el usuario está autenticado y está en login o signup, redirige a dashboard
-            if (pathname === '/login' || pathname === '/signup') {
-                router.replace('/dashboard');
-            }
-        } else {
-            // Si el usuario no está autenticado y no está en login/signup, redirige a login
-            if (pathname !== '/login' && pathname !== '/signup') {
-                router.replace('/login');
-            }
-        }
-    }
-  }, [user, isAuthLoading, router, pathname]);
+  }, [router, pathname]);
 
   useEffect(() => {
     const theme = settings?.theme || defaultSettings.theme;
     document.body.className = theme;
   }, [settings?.theme]);
   
-  if (isDataLoading || (!TEMPORARY_AUTH_BYPASS && isAuthLoading)) {
+  if (isDataLoading) {
     return (
         <div className="flex h-screen w-full items-center justify-center">
             <Loader2 className="mr-2 h-8 w-8 animate-spin" />
@@ -210,35 +142,18 @@ export default function MainLayoutClient({ children }: { children: React.ReactNo
     );
   }
 
-  // Para las rutas de login/signup, o si el usuario no está autenticado, no se muestra el layout principal
-  if ((!user && !TEMPORARY_AUTH_BYPASS) || pathname === '/login' || pathname === '/signup') {
+  // Para las rutas de login/signup, no se muestra el layout principal
+  if (pathname === '/login' || pathname === '/signup') {
     return <>{children}</>;
   }
 
 
   const handleSignOut = async () => {
-    if (TEMPORARY_AUTH_BYPASS) {
-      router.push('/');
-      return;
-    }
-
-    if (syncStatus === 'pending') {
-      toast({
-        title: "Cambios pendientes",
-        description: "Hay cambios locales pendientes de sincronización. Por favor, espere a que se sincronicen antes de cerrar sesión.",
-        variant: "destructive",
-      });
-      return;
-    }
-    await signOut(auth);
     router.push('/login');
   };
 
   return (
     <>
-      {/* Banner de estado de conexión */}
-      <ConnectionStatus syncStatus={syncStatus} />
-      
       <SidebarProvider>
         <Sidebar>
           <SidebarHeader>

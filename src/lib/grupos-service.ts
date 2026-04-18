@@ -1,13 +1,6 @@
-import { db } from '@/lib/firebase';
-import {
-  collection,
-  getDocs,
-  onSnapshot
-} from 'firebase/firestore';
-
-// ============================================
-// TIPOS E INTERFACES
-// ============================================
+// ============================================================================
+// GRUPOS SERVICE — 100% Local (localStorage)
+// ============================================================================
 
 export interface Grupo {
   id: string;
@@ -46,20 +39,12 @@ export interface EstudiantesGrupoResult {
   error?: string;
 }
 
-// ============================================
-// CONFIGURACIÓN
-// ============================================
-
-const COLECCIONES_GRUPOS = ['official_groups', 'groups'];
-const COLECCIONES_ESTUDIANTES = ['students', 'alumnos'];
+const GRUPOS_KEY = 'pigec_grupos';
+const ESTUDIANTES_KEY = 'pigec_estudiantes_grupo';
 const PERIODO_ACTUAL = '2026-1';
 
-// ============================================
-// FUNCIONES AUXILIARES
-// ============================================
-
 function extraerSemestre(grupoNombre: string): number {
-  const match = grupoNombre.match(/^(\d+)/);
+  const match = grupoNombre.match(/semestre\s*(\d)/i);
   return match ? parseInt(match[1]) : 1;
 }
 
@@ -75,315 +60,107 @@ function extraerTurno(grupoNombre: string): 'Matutino' | 'Vespertino' {
   return 'Matutino';
 }
 
-// ============================================
-// FUNCIONES PRINCIPALES
-// ============================================
+function safeParse<T>(key: string): T[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
 
-/**
- * Obtiene todos los grupos oficiales de Firestore
- */
+function safeSet(key: string, data: unknown[]): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(key, JSON.stringify(data));
+}
+
+// Demo groups for first-time users
+function getDemoGrupos(): Grupo[] {
+  return [
+    { id: 'demo-g1', nombre: 'Grupo 1A - Semestre 1', semestre: 1, carrera: 'Tecnólogo', turno: 'Matutino', periodo: PERIODO_ACTUAL, totalEstudiantes: 5, activo: true, fechaCreacion: new Date() },
+    { id: 'demo-g2', nombre: 'Grupo 2A - Semestre 2', semestre: 2, carrera: 'Tecnólogo', turno: 'Matutino', periodo: PERIODO_ACTUAL, totalEstudiantes: 4, activo: true, fechaCreacion: new Date() },
+    { id: 'demo-g3', nombre: 'Grupo 3A - Semestre 3', semestre: 3, carrera: 'Tecnólogo', turno: 'Vespertino', periodo: PERIODO_ACTUAL, totalEstudiantes: 6, activo: true, fechaCreacion: new Date() },
+  ];
+}
+
 export async function obtenerGrupos(): Promise<GruposResult> {
-  if (!db) {
-    return { success: false, grupos: [], error: 'Base de datos no disponible' };
-  }
-
   try {
-    let gruposSnapshot = null as Awaited<ReturnType<typeof getDocs>> | null;
-    let coleccionUsada = '';
+    let grupos = safeParse<Grupo>(GRUPOS_KEY);
 
-    for (const nombreColeccion of COLECCIONES_GRUPOS) {
-      try {
-        const gruposRef = collection(db, nombreColeccion);
-        const snapshot = await getDocs(gruposRef);
-        gruposSnapshot = snapshot;
-        coleccionUsada = nombreColeccion;
-        break;
-      } catch (error) {
-        console.warn(`[grupos-service] No se pudo leer ${nombreColeccion}:`, error);
-      }
+    if (grupos.length === 0) {
+      grupos = getDemoGrupos();
+      safeSet(GRUPOS_KEY, grupos);
     }
 
-    if (!gruposSnapshot) {
-      return {
-        success: false,
-        grupos: [],
-        error: 'No se pudo leer ninguna colección de grupos (official_groups/groups).'
-      };
-    }
-
-    if (gruposSnapshot.empty) {
-      console.log(`[grupos-service] No se encontraron grupos en ${coleccionUsada}`);
-      return { success: true, grupos: [] };
-    }
-
-    const grupos: Grupo[] = gruposSnapshot.docs.map(doc => {
-      const data = doc.data();
-      const nombre = data.name || `Grupo ${doc.id}`;
-      
-      return {
-        id: doc.id,
-        nombre: nombre,
-        semestre: extraerSemestre(nombre),
-        carrera: extraerCarrera(nombre),
-        turno: extraerTurno(nombre),
-        periodo: PERIODO_ACTUAL,
-        totalEstudiantes: 0,
-        tutorEmail: data.tutorEmail,
-        activo: true,
-        fechaCreacion: data.createdAt ? new Date(data.createdAt) : undefined
-      };
-    });
-
-    // Obtener conteo de estudiantes por grupo
-    let conteoPorGrupo = new Map<string, number>();
-    try {
-      conteoPorGrupo = await obtenerConteoEstudiantesPorGrupo();
-    } catch (error) {
-      console.warn('[grupos-service] Sin conteo de estudiantes por permisos o conectividad:', error);
-    }
-    
-    grupos.forEach(grupo => {
-      grupo.totalEstudiantes = conteoPorGrupo.get(grupo.id) || 0;
-    });
-
-    grupos.sort((a, b) => {
-      if (a.semestre !== b.semestre) return a.semestre - b.semestre;
-      return a.nombre.localeCompare(b.nombre);
-    });
-
-    console.log(`[grupos-service] Cargados ${grupos.length} grupos desde ${coleccionUsada}`);
-    return { success: true, grupos };
-
-  } catch (error) {
-    console.error('Error obteniendo grupos:', error);
-    return { 
-      success: false, 
-      grupos: [], 
-      error: `Error al obtener grupos: ${error}` 
-    };
-  }
-}
-
-/**
- * Obtiene todos los estudiantes de un grupo específico
- * IMPORTANTE: Filtra en memoria para evitar problemas de índices de Firestore
- */
-export async function obtenerEstudiantesGrupo(grupoId: string): Promise<EstudiantesGrupoResult> {
-  if (!db) {
-    return { success: false, estudiantes: [], error: 'Base de datos no disponible' };
-  }
-
-  try {
-    console.log(`[grupos-service] ========== BUSCANDO ESTUDIANTES ==========`);
-    console.log(`[grupos-service] Grupo ID buscado: "${grupoId}"`);
-    console.log(`[grupos-service] Tipo de grupoId: ${typeof grupoId}`);
-    
-    // Obtener TODOS los estudiantes y filtrar en memoria (evita problemas de índices)
-    let estudiantesSnapshot = null as Awaited<ReturnType<typeof getDocs>> | null;
-
-    for (const nombreColeccion of COLECCIONES_ESTUDIANTES) {
-      try {
-        const estudiantesRef = collection(db, nombreColeccion);
-        const snapshot = await getDocs(estudiantesRef);
-        estudiantesSnapshot = snapshot;
-        break;
-      } catch (error) {
-        console.warn(`[grupos-service] No se pudo leer ${nombreColeccion}:`, error);
-      }
-    }
-
-    if (!estudiantesSnapshot) {
-      return {
-        success: false,
-        estudiantes: [],
-        error: 'No se pudo leer ninguna colección de estudiantes (students/alumnos).'
-      };
-    }
-
-    console.log(`[grupos-service] Total documentos en 'students': ${estudiantesSnapshot.docs.length}`);
-
-    if (estudiantesSnapshot.empty) {
-      console.log('[grupos-service] No hay estudiantes en la base de datos');
-      return { success: true, estudiantes: [] };
-    }
-
-    // Debug: mostrar todos los grupos encontrados en estudiantes
-    const gruposEncontrados = new Set<string>();
-    estudiantesSnapshot.docs.forEach(doc => {
-      const data = doc.data();
-      const gid = data.official_group_id || data.groupId || data.grupoId;
-      if (gid) {
-        gruposEncontrados.add(gid);
-      }
-    });
-    console.log(`[grupos-service] Grupos encontrados en estudiantes:`, Array.from(gruposEncontrados));
-
-    // Filtrar manualmente por official_group_id
-    const estudiantesFiltrados = estudiantesSnapshot.docs.filter(doc => {
-      const data = doc.data();
-      const estudianteGrupoId = data.official_group_id || data.groupId || data.grupoId;
-      const coincide = estudianteGrupoId === grupoId;
-      return coincide;
-    });
-
-    console.log(`[grupos-service] Estudiantes filtrados para grupo "${grupoId}": ${estudiantesFiltrados.length}`);
-
-    if (estudiantesFiltrados.length === 0) {
-      return { success: true, estudiantes: [] };
-    }
-
-    // Obtener el nombre del grupo
-    const gruposResult = await obtenerGrupos();
-    const grupo = gruposResult.grupos.find(g => g.id === grupoId);
-    const grupoNombre = grupo?.nombre || 'Grupo';
-
-    const estudiantes: EstudianteGrupo[] = estudiantesFiltrados.map(doc => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        nombre: data.name || 'Sin nombre',
-        matricula: data.matricula,
-        grupo: grupoNombre,
-        grupoId: grupoId,
-        semestre: extraerSemestre(grupoNombre),
-        telefono: data.phone || data.telefono,
-        email: data.email
-      };
-    });
-
-    // Ordenar por nombre
-    estudiantes.sort((a, b) => a.nombre.localeCompare(b.nombre));
-
-    return { success: true, estudiantes };
-
-  } catch (error) {
-    console.error('[grupos-service] Error obteniendo estudiantes del grupo:', error);
-    return { 
-      success: false, 
-      estudiantes: [], 
-      error: `Error al obtener estudiantes: ${error}` 
-    };
-  }
-}
-
-/**
- * Obtiene el conteo de estudiantes por grupo
- * Filtra en memoria para evitar problemas de índices
- */
-export async function obtenerConteoEstudiantesPorGrupo(): Promise<Map<string, number>> {
-  if (!db) {
-    return new Map();
-  }
-
-  try {
-    let estudiantesSnapshot = null as Awaited<ReturnType<typeof getDocs>> | null;
-
-    for (const nombreColeccion of COLECCIONES_ESTUDIANTES) {
-      try {
-        const estudiantesRef = collection(db, nombreColeccion);
-        const snapshot = await getDocs(estudiantesRef);
-        estudiantesSnapshot = snapshot;
-        break;
-      } catch (error) {
-        console.warn(`[grupos-service] No se pudo leer ${nombreColeccion} para conteo:`, error);
-      }
-    }
-
-    if (!estudiantesSnapshot) {
-      return new Map();
-    }
-
+    const estudiantes = safeParse<EstudianteGrupo>(ESTUDIANTES_KEY);
     const conteo = new Map<string, number>();
-
-    estudiantesSnapshot.docs.forEach(doc => {
-      const data = doc.data();
-      const grupoId = data.official_group_id || data.groupId || data.grupoId;
-      
-      if (grupoId) {
-        conteo.set(grupoId, (conteo.get(grupoId) || 0) + 1);
-      }
+    estudiantes.forEach(e => {
+      conteo.set(e.grupoId, (conteo.get(e.grupoId) || 0) + 1);
     });
+    grupos.forEach(g => { g.totalEstudiantes = conteo.get(g.id) || g.totalEstudiantes; });
 
-    console.log(`[grupos-service] Conteo de estudiantes por grupo: ${conteo.size} grupos con estudiantes`);
-    return conteo;
-
+    grupos.sort((a, b) => a.semestre !== b.semestre ? a.semestre - b.semestre : a.nombre.localeCompare(b.nombre));
+    return { success: true, grupos };
   } catch (error) {
-    console.error('[grupos-service] Error obteniendo conteo de estudiantes:', error);
-    return new Map();
+    return { success: false, grupos: [], error: `Error: ${error}` };
   }
 }
 
-/**
- * Suscribe a cambios en tiempo real en los grupos
- */
-export function subscribeToGrupos(callback: (grupos: Grupo[]) => void): () => void {
-  if (!db) {
-    callback([]);
-    return () => {};
+export async function obtenerEstudiantesGrupo(grupoId: string): Promise<EstudiantesGrupoResult> {
+  try {
+    const estudiantes = safeParse<EstudianteGrupo>(ESTUDIANTES_KEY).filter(e => e.grupoId === grupoId);
+    estudiantes.sort((a, b) => a.nombre.localeCompare(b.nombre));
+    return { success: true, estudiantes };
+  } catch (error) {
+    return { success: false, estudiantes: [], error: `Error: ${error}` };
   }
+}
 
-  const gruposRef = collection(db, COLECCIONES_GRUPOS[0]);
-  
-  const unsubscribe = onSnapshot(gruposRef, async (snapshot) => {
-    const grupos: Grupo[] = snapshot.docs.map(doc => {
-      const data = doc.data();
-      const nombre = data.name || `Grupo ${doc.id}`;
-      
-      return {
-        id: doc.id,
-        nombre: nombre,
-        semestre: extraerSemestre(nombre),
-        carrera: extraerCarrera(nombre),
-        turno: extraerTurno(nombre),
-        periodo: PERIODO_ACTUAL,
-        totalEstudiantes: 0,
-        tutorEmail: data.tutorEmail,
-        activo: true,
-        fechaCreacion: data.createdAt ? new Date(data.createdAt) : undefined
-      };
-    });
-
-    const conteoPorGrupo = await obtenerConteoEstudiantesPorGrupo();
-    grupos.forEach(grupo => {
-      grupo.totalEstudiantes = conteoPorGrupo.get(grupo.id) || 0;
-    });
-
-    grupos.sort((a, b) => {
-      if (a.semestre !== b.semestre) return a.semestre - b.semestre;
-      return a.nombre.localeCompare(b.nombre);
-    });
-
-    callback(grupos);
-  }, (error) => {
-    console.error('[grupos-service] Error en suscripción a grupos:', error);
+export async function obtenerConteoEstudiantesPorGrupo(): Promise<Map<string, number>> {
+  const conteo = new Map<string, number>();
+  safeParse<EstudianteGrupo>(ESTUDIANTES_KEY).forEach(e => {
+    conteo.set(e.grupoId, (conteo.get(e.grupoId) || 0) + 1);
   });
-
-  return unsubscribe;
+  return conteo;
 }
 
-/**
- * Formatea el nombre del grupo para mostrar
- */
+export function subscribeToGrupos(callback: (grupos: Grupo[]) => void): () => void {
+  // Local mode — load once and return no-op unsubscribe
+  obtenerGrupos().then(result => callback(result.grupos));
+  return () => {};
+}
+
 export function formatearNombreGrupo(grupo: Grupo): string {
   return `${grupo.nombre} (${grupo.totalEstudiantes} estudiantes)`;
 }
 
-/**
- * Filtra grupos por semestre
- */
 export function filtrarGruposPorSemestre(grupos: Grupo[], semestre: number | 'all'): Grupo[] {
   if (semestre === 'all') return grupos;
   return grupos.filter(g => g.semestre === semestre);
 }
 
-/**
- * Busca grupos por nombre
- */
 export function buscarGrupos(grupos: Grupo[], termino: string): Grupo[] {
-  const terminoLower = termino.toLowerCase();
-  return grupos.filter(g => 
-    g.nombre.toLowerCase().includes(terminoLower) ||
-    g.carrera.toLowerCase().includes(terminoLower) ||
-    g.tutorEmail?.toLowerCase().includes(terminoLower)
+  const term = termino.toLowerCase();
+  return grupos.filter(g =>
+    g.nombre.toLowerCase().includes(term) ||
+    g.carrera.toLowerCase().includes(term) ||
+    g.tutorEmail?.toLowerCase().includes(term)
   );
+}
+
+// Save helpers for screening-management and other components
+export function saveGrupoLocal(grupo: Grupo): void {
+  const current = safeParse<Grupo>(GRUPOS_KEY);
+  const idx = current.findIndex(g => g.id === grupo.id);
+  if (idx >= 0) current[idx] = grupo; else current.push(grupo);
+  safeSet(GRUPOS_KEY, current);
+}
+
+export function saveEstudiantesGrupoLocal(estudiantes: EstudianteGrupo[]): void {
+  const current = safeParse<EstudianteGrupo>(ESTUDIANTES_KEY);
+  const ids = new Set(estudiantes.map(e => e.id));
+  const filtered = current.filter(e => !ids.has(e.id));
+  filtered.push(...estudiantes);
+  safeSet(ESTUDIANTES_KEY, filtered);
 }
