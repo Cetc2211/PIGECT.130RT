@@ -36,6 +36,7 @@ import {
 
 import { assembleClinicalContext, checkDataAvailability, type DataAvailability } from '@/lib/clinical-context-assembler';
 import { generateClinicalPlan, hasUserGeminiApiKey, type PdfFileReference } from '@/lib/ai-service';
+import { getBuiltInBibliographySummary } from '@/lib/built-in-bibliography';
 import {
     getReferenceDocuments,
     getAllReferenceText,
@@ -319,8 +320,13 @@ export default function TreatmentPlanGenerator({
                                     label="Evaluación Educativa (CHTE)"
                                 />
                                 <DataIndicator
+                                    available={true}
+                                    label={`Biblioteca Clínica Integrada (${getBuiltInBibliographySummary().length} fuentes)`}
+                                    isLibrary
+                                />
+                                <DataIndicator
                                     available={dataAvailability.hasReferenceDocuments}
-                                    label={`Bibliografía de referencia (${dataAvailability.referenceDocumentCount} documentos)`}
+                                    label={`Bibliografía adicional (${dataAvailability.referenceDocumentCount} documentos cargados)`}
                                     isLibrary
                                 />
                             </div>
@@ -489,12 +495,31 @@ export default function TreatmentPlanGenerator({
                             Bibliografía de Referencia
                         </DialogTitle>
                         <DialogDescription>
-                            Agrega documentos o pega texto de bibliografía clínica para fundamentar el plan de tratamiento.
+                            Administra la bibliografia clinica. La biblioteca integrada se incluye automaticamente en todos los expedientes.
                         </DialogDescription>
                     </DialogHeader>
 
                     <div className="flex-1 overflow-y-auto space-y-6 py-2">
-                        {/* ── Section 1: Upload Files ── */}
+                        {/* Built-in Library Info */}
+                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <p className="text-xs font-semibold text-blue-800 mb-1">
+                                Biblioteca Clinica Integrada (siempre disponible)
+                            </p>
+                            <p className="text-xs text-blue-700">
+                                La aplicacion incluye {getBuiltInBibliographySummary().length} fuentes clinicas que se usan automaticamente en todos los planes. No necesitas volver a cargarlas.
+                            </p>
+                            <div className="mt-2 space-y-1">
+                                {getBuiltInBibliographySummary().map((ref, i) => (
+                                    <p key={i} className="text-[10px] text-blue-600">
+                                        {ref.author} - {ref.title} ({ref.model})
+                                    </p>
+                                ))}
+                            </div>
+                        </div>
+
+                        <Separator />
+
+                        {/* Upload Files */}
                         <div className="space-y-3">
                             <h4 className="text-sm font-semibold text-gray-700">Cargar Archivos</h4>
                             <input

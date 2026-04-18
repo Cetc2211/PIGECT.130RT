@@ -1,6 +1,7 @@
 'use client';
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { getBuiltInBibliographyText } from './built-in-bibliography';
 
 export const USER_GEMINI_API_KEY_STORAGE_KEY = 'USER_GEMINI_API_KEY';
 export const AI_KEY_MISSING_MESSAGE = 'Configura tu API Key en Ajustes para activar la IA';
@@ -47,38 +48,45 @@ INSTRUCCIONES DE ANÁLISIS:
 4. CONECTA los resultados neuropsicológicos con las dificultades académicas y conductuales observadas.
 5. Si se proporciona bibliografía de referencia, BASE tus intervenciones en las estrategias y modelos descritos en dichas fuentes.
 
-FORMATO DE SALIDA - El plan debe contener las siguientes secciones:
+ESTRUCTURA DEL PLAN - El documento debe contener las siguientes secciones, escritas con títulos claros en mayúsculas seguidos del contenido narrativo:
 
-## I. ANÁLISIS CLÍNICO INTEGRAL
-Analiza en profundidad los resultados de todos los instrumentos, el análisis funcional y la formulación cognitiva. Describe el perfil clínico del estudiante de forma integrada. NO repitas datos numéricos de forma aislada; intégralos en un análisis narrativo coherente.
+I. ANALISIS CLINICO INTEGRAL
+Analiza en profundidad los resultados de todos los instrumentos, el análisis funcional y la formulación cognitiva. Describe el perfil clínico del estudiante de forma integrada en prosa narrativa. NO repitas datos numéricos de forma aislada; integralos en un análisis interpretativo coherente.
 
-## II. FORMULACIÓN DEL CASO
+II. FORMULACION DEL CASO
 Sintetiza la comprensión clínica del caso en una formulación que incluya: factores predisponentes, factores precipitantes, factores de mantenimiento y factores protectores. Conecta la formulación cognitiva con los patrones conductuales observados.
 
-## III. PLAN DE INTERVENCIÓN
-Define objetivos terapéuticos SMART (Específicos, Medibles, Alcanzables, Relevantes, Temporales) organizados por:
-a) Objetivos de estabilización (inmediatos, 1-2 semanas)
-b) Objetivos de intervención (corto plazo, 3-6 semanas)
-c) Objetivos de consolidación (mediano plazo, 7-12 semanas)
+III. PLAN DE INTERVENCION
+Define objetivos terapéuticos SMART organizados por:
+a) Objetivos de estabilizacion (inmediatos, 1-2 semanas)
+b) Objetivos de intervencion (corto plazo, 3-6 semanas)
+c) Objetivos de consolidacion (mediano plazo, 7-12 semanas)
 
-Para cada objetivo incluye:
-- La técnica o enfoque terapéutico específico (TCC, AC, DBT, psicoeducación, etc.)
-- La justificación basada en los datos clínicos
-- La estrategia de implementación concreta
-- Los criterios de medición del progreso
+Para cada objetivo incluye la tecnica terapeutica, la justificacion basada en los datos clinicos, la estrategia de implementacion concreta y los criterios de medicion del progreso.
 
-## IV. ESTRATEGIAS ESPECÍFICAS
-Lista estrategias concretas de intervención derivadas del análisis, conectando cada una con la evidencia clínica que la respalda (puntuaciones, análisis funcional, bibliografía).
+IV. ESTRATEGIAS ESPECIFICAS
+Describe estrategias concretas de intervencion derivadas del analisis, conectando cada una con la evidencia clinica que la respalda (puntuaciones, analisis funcional, bibliografia).
 
-## V. CRITERIOS DE ALTA Y SEGUIMIENTO
-Define criterios claros para: alta del programa, escalamiento a Nivel 3, derivación externa, y frecuencia de sesiones de seguimiento.
+V. CRITERIOS DE ALTA Y SEGUIMIENTO
+Define criterios claros para: alta del programa, escalamiento a Nivel 3, derivacion externa y frecuencia de sesiones de seguimiento.
 
-REGLAS IMPORTANTES:
-- El plan debe ser PERSONALIZADO. Si los datos muestran depresión severa con ideación suicida, el plan debe priorizar la seguridad y la intervención en crisis. Si muestran ansiedad generalizada, prioriza técnicas de manejo de ansiedad. NO generes un plan genérico.
-- NUNCA menciones que eres una IA o lenguaje modelo.
-- Utiliza lenguaje técnico-clínico profesional pero accesible.
-- Si no hay datos para una sección, indícalo explícitamente y sugiere qué evaluaciones complementarias serían necesarias.
-- RESPETA el nivel de intervención MTSS asignado (Nivel 1, 2 o 3) y ajusta la intensidad del plan en consecuencia.`;
+REGLAS DE FORMATO OBLIGATORIAS (CRITICAS):
+- Escribe TODO el texto en prosa narrativa natural, como lo redactaria un profesional clinico en un expediente real.
+- NO uses asteriscos (*), signos de numero (#), guiones dobles (--) ni caracteres de formato markdown en ningun momento.
+- NO uses viñetas con simbolos como *, -, o >. Si necesitas enumerar elementos, hazlo en prosa: "En primer lugar...", "Asimismo...", "Adicionalmente...", "Por ultimo...".
+- Los titulos de seccion se escriben UNICAMENTE en mayusculas, en una sola linea, sin subrayar ni decorar.
+- Cada parrafo debe tener al menos 3 oraciones completas. Evita parrafos de una sola linea.
+- Usa un tono formal, profesional y objetivo, como el de un informe clinico institucional.
+- Utiliza terminologia tecnica clinica adecuada (TCC, DBT, activacion conductual, reestructuracion cognitiva, formulacion cognitiva, etc.) de forma natural dentro del texto.
+- Evita repetir la misma estructura oracional. Alterna entre oraciones simples y compuestas.
+- NO uses negritas, cursivas ni cualquier formato especial. Solo texto plano con titulos en mayusculas.
+- NUNCA menciones que eres una IA, un modelo de lenguaje, una inteligencia artificial ni nada similar.
+- Escribe como si el informe fuera a ser firmado por un psicologo clinico real.
+
+REGLAS CLINICAS:
+- El plan debe ser PERSONALIZADO para cada caso. Si los datos muestran depresion severa con ideacion suicida, prioriza la seguridad y la intervencion en crisis. Si muestran ansiedad generalizada, prioriza tecnicas de manejo de ansiedad. NO generes un plan generico.
+- Si no hay datos para una seccion, indicalo explícitamente y sugiere que evaluaciones complementarias serian necesarias.
+- RESPETA el nivel de intervencion MTSS asignado (Nivel 1, 2 o 3) y ajusta la intensidad del plan en consecuencia.`;
 
 export interface PdfFileReference {
     mimeType: string;
@@ -120,28 +128,47 @@ export async function generateClinicalPlan(
         }
     }
 
-    // Build the text prompt combining clinical data and references
-    let userPrompt = `A continuación se presentan los datos clínicos completos del estudiante. Genera un Plan de Tratamiento Narrativo personalizado siguiendo el formato indicado.\n\n`;
-    userPrompt += `--- INICIO DE DATOS CLÍNICOS ---\n\n${clinicalContext}\n\n`;
+    // Build the text prompt combining clinical data, built-in bibliography, and user references
+    let userPrompt = `A continuacion se presentan los datos clinicos completos del estudiante y la bibliografia clinica de referencia. Genera un Plan de Tratamiento Narrativo personalizado siguiendo las instrucciones del sistema.\n\n`;
+    userPrompt += `--- INICIO DE DATOS CLINICOS ---\n\n${clinicalContext}\n\n`;
 
+    // Always include built-in clinical bibliography (hardcoded in the application)
+    const builtInText = getBuiltInBibliographyText();
+    if (builtInText) {
+        userPrompt += `--- BIBLIOTECA CLINICA DE REFERENCIA (integrada en la aplicacion) ---\n\n${builtInText}\n\n`;
+        userPrompt += `Utiliza la biblioteca clinica anterior como fundamento teorico principal para tus intervenciones. Cita las fuentes relevantes cuando apliques una estrategia o tecnica especifica.\n\n`;
+    }
+
+    // Include PDF file references info
     if (options?.pdfFiles && options.pdfFiles.length > 0) {
-        userPrompt += `--- BIBLIOGRAFÍA EN ARCHIVOS PDF ---\n\n`;
-        userPrompt += `Se han adjuntado ${options.pdfFiles.length} archivo(s) PDF como referencia bibliográfica:\n`;
+        userPrompt += `--- BIBLIOGRAFIA EN ARCHIVOS PDF ADICIONALES ---\n\n`;
+        userPrompt += `Se han adjuntado ${options.pdfFiles.length} archivo(s) PDF como referencia bibliografica adicional:\n`;
         options.pdfFiles.forEach((pdf, i) => {
             userPrompt += `  ${i + 1}. "${pdf.title}"\n`;
         });
-        userPrompt += `\nLee y analiza estos documentos PDF para fundamentar tus intervenciones con las estrategias, técnicas y modelos clínicos descritos en ellos. Cita las fuentes relevantes cuando apliques una estrategia específica.\n\n`;
+        userPrompt += `\nLee y analiza estos documentos PDF para complementar las estrategias clinicas.\n\n`;
     }
 
+    // Include user-uploaded text references
     if (referenceText && referenceText.trim().length > 0) {
-        userPrompt += `--- INICIO DE BIBLIOGRAFÍA DE REFERENCIA (TEXTO) ---\n\n${referenceText}\n\n`;
-        userPrompt += `Utiliza la bibliografía anterior como base teórica complementaria para fundamentar tus intervenciones.\n\n`;
+        userPrompt += `--- BIBLIOGRAFIA ADICIONAL CARGADA POR EL ESPECIALISTA ---\n\n${referenceText}\n\n`;
+        userPrompt += `Integra la bibliografia anterior como base teorica complementaria.\n\n`;
     }
 
-    userPrompt += `--- FIN DE DATOS ---\n\nGenera ahora el Plan de Tratamiento Narrativo completo.`;
+    userPrompt += `--- FIN DE DATOS ---\n\nGenera ahora el Plan de Tratamiento Narrativo completo. Recuerda: escribe en prosa clinica natural, sin asteriscos, sin signos de numero, sin formato markdown, como lo redactaria un profesional en un expediente clinico real.`;
 
     contentParts.push({ text: userPrompt });
 
     const response = await model.generateContent(contentParts);
-    return response.response.text() || '';
+    let text = response.response.text() || '';
+
+    // Post-process: clean up any markdown formatting that might slip through
+    text = text.replace(/^#{1,6}\s+/gm, '');           // Remove # headings
+    text = text.replace(/\*\*([^*]+)\*\*/g, '$1');     // Remove **bold**
+    text = text.replace(/\*([^*]+)\*/g, '$1');         // Remove *italic*
+    text = text.replace(/---+/g, '');                    // Remove --- separators
+    text = text.replace(/^[-*]\s+/gm, '');              // Remove - or * list markers
+    text = text.replace(/^\s*\n{3,}/gm, '\n\n');       // Collapse excessive newlines
+
+    return text;
 }
