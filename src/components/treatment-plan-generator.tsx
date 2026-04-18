@@ -34,13 +34,13 @@ import {
 } from "@/components/ui/dialog";
 
 import { assembleClinicalContext, checkDataAvailability, type DataAvailability } from '@/lib/clinical-context-assembler';
-import { generateClinicalPlan, hasUserGeminiApiKey } from '@/lib/ai-service';
+import { generateClinicalPlan, hasUserGeminiApiKey, type PdfFileReference } from '@/lib/ai-service';
 import {
     getReferenceDocuments,
     getAllReferenceText,
-    saveReferenceDocument,
+    getPdfDocumentsForGeneration,
+    processAndUploadFile,
     deleteReferenceDocument,
-    extractTextFromFile,
     type ReferenceDocument,
 } from '@/lib/reference-documents-service';
 
@@ -71,6 +71,7 @@ export default function TreatmentPlanGenerator({
 }: TreatmentPlanGeneratorProps) {
     const [plan, setPlan] = useState(initialData?.plan_narrativo_final || '');
     const [isLoading, setIsLoading] = useState(false);
+    const [loadingStage, setLoadingStage] = useState<string>('');
     const [error, setError] = useState<string | null>(null);
     const [isPieiModalOpen, setIsPieiModalOpen] = useState(false);
     const [bibliographyDialogOpen, setBibliographyDialogOpen] = useState(false);
@@ -108,17 +109,32 @@ export default function TreatmentPlanGenerator({
 
         setIsLoading(true);
         setError(null);
+        setLoadingStage('Recopilando datos clínicos...');
 
         try {
             // Assemble all clinical data
             const clinicalContext = assembleClinicalContext(studentId, studentName);
             setClinicalContextPreview(clinicalContext);
 
-            // Get reference documents text
+            // Get text-based reference documents
             const referenceText = await getAllReferenceText();
 
-            // Generate plan with AI
-            const generatedPlan = await generateClinicalPlan(clinicalContext, referenceText);
+            // Get PDF documents for Gemini File API references
+            setLoadingStage('Procesando documentos PDF...');
+            const pdfDocs = await getPdfDocumentsForGeneration();
+            const pdfFiles: PdfFileReference[] = pdfDocs
+                .filter((doc) => doc.geminiUri && doc.geminiFileName)
+                .map((doc) => ({
+                    mimeType: doc.mimeType || 'application/pdf',
+                    fileUri: doc.geminiUri!,
+                    title: doc.title,
+                }));
+
+            // Generate plan with AI (including PDF file references)
+            setLoadingStage('Generando plan de tratamiento con IA...');
+            const generatedPlan = await generateClinicalPlan(clinicalContext, referenceText, {
+                pdfFiles: pdfFiles.length > 0 ? pdfFiles : undefined,
+            });
             setPlan(generatedPlan);
 
             // Update data availability
@@ -130,6 +146,7 @@ export default function TreatmentPlanGenerator({
             setError(message);
         } finally {
             setIsLoading(false);
+            setLoadingStage('');
         }
     }, [studentId, studentName]);
 
@@ -158,27 +175,31 @@ export default function TreatmentPlanGenerator({
         setDataAvailability(availability);
     }, [studentId]);
 
+    const [uploadProgress, setUploadProgress] = useState<{[id: string]: number}>({});
+    const [uploadStage, setUploadStage] = useState<{[id: string]: string}>({});
+
     const handleUploadFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (!files || files.length === 0) return;
 
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
+            const tempId = `upload-${Date.now()}-${i}`;
+            setUploadProgress((prev) => ({ ...prev, [tempId]: 0 }));
+            setUploadStage((prev) => ({ ...prev, [tempId]: 'Iniciando...' }));
+
             try {
-                const contentText = await extractTextFromFile(file);
-                const doc: ReferenceDocument = {
-                    id: `ref-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                    title: file.name.replace(/\.[^/.]+$/, ''),
-                    author: 'No especificado',
-                    uploadedAt: new Date().toISOString(),
-                    contentText,
-                    fileName: file.name,
-                    fileSize: file.size,
-                    tags: [],
-                };
-                await saveReferenceDocument(doc);
+                await processAndUploadFile(file, {
+                    onProgress: (pct, stage) => {
+                        setUploadProgress((prev) => ({ ...prev, [tempId]: pct }));
+                        setUploadStage((prev) => ({ ...prev, [tempId]: stage }));
+                    },
+                });
             } catch (err) {
-                console.error(`Error uploading ${file.name}:`, err);
+                console.error(`Error procesando ${file.name}:`, err);
+            } finally {
+                setUploadProgress((prev) => { const next = { ...prev }; delete next[tempId]; return next; });
+                setUploadStage((prev) => { const next = { ...prev }; delete next[tempId]; return next; });
             }
         }
 
@@ -310,7 +331,7 @@ export default function TreatmentPlanGenerator({
                             <div className="flex items-center gap-2 text-green-800">
                                 <Loader2 className="h-4 w-4 animate-spin" />
                                 <span className="text-sm font-medium">
-                                    Analizando datos clínicos y generando plan de tratamiento...
+                                    {loadingStage || 'Generando plan de tratamiento...'}
                                 </span>
                             </div>
                             {clinicalContextPreview && (
@@ -433,7 +454,7 @@ export default function TreatmentPlanGenerator({
                             Bibliografía de Referencia
                         </DialogTitle>
                         <DialogDescription>
-                            Carga documentos de texto (.txt, .md) con bibliografía clínica para fundamentar el plan de tratamiento generado por la IA.
+                            Carga documentos con bibliografía clínica para fundamentar el plan de tratamiento. Los PDFs se procesan con IA de Gemini para máxima calidad de lectura.
                         </DialogDescription>
                     </DialogHeader>
 
@@ -443,7 +464,7 @@ export default function TreatmentPlanGenerator({
                             <input
                                 ref={fileInputRef}
                                 type="file"
-                                accept=".txt,.md,.csv,.json"
+                                accept=".txt,.md,.csv,.json,.pdf"
                                 multiple
                                 onChange={handleUploadFile}
                                 className="hidden"
@@ -454,16 +475,36 @@ export default function TreatmentPlanGenerator({
                                     asChild
                                     variant="outline"
                                     className="w-full cursor-pointer"
+                                    disabled={Object.keys(uploadProgress).length > 0}
                                 >
                                     <span>
                                         <FileUp className="mr-2 h-4 w-4" />
-                                        Cargar archivos de texto (.txt, .md)
+                                        {Object.keys(uploadProgress).length > 0
+                                            ? `Procesando... (${Object.keys(uploadProgress).length})`
+                                            : 'Cargar archivos (.txt, .md, .pdf)'}
                                     </span>
                                 </Button>
                             </label>
                             <p className="text-xs text-gray-500">
-                                Los formatos compatibles son: .txt, .md, .csv, .json. Para PDFs, extrae el texto manualmente.
+                                Compatible con: .txt, .md, .csv, .json, .pdf. Los PDFs se procesan con IA de Gemini.
                             </p>
+                            {/* Upload Progress Indicators */}
+                            {Object.entries(uploadProgress).map(([id, pct]) => (
+                                <div key={id} className="space-y-1 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                    <div className="flex items-center gap-2 text-blue-800">
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                        <span className="text-xs font-medium">
+                                            {uploadStage[id] || 'Procesando...'} ({pct}%)
+                                        </span>
+                                    </div>
+                                    <div className="w-full bg-blue-200 rounded-full h-1.5">
+                                        <div
+                                            className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
+                                            style={{ width: `${pct}%` }}
+                                        />
+                                    </div>
+                                </div>
+                            ))}
                         </div>
 
                         {/* Documents List */}
@@ -483,13 +524,18 @@ export default function TreatmentPlanGenerator({
                                             key={doc.id}
                                             className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border group"
                                         >
-                                            <FileText className="h-4 w-4 mt-0.5 text-gray-400 shrink-0" />
+                                            <FileText className={`h-4 w-4 mt-0.5 shrink-0 ${doc.isPdf ? 'text-red-400' : 'text-gray-400'}`} />
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-sm font-medium text-gray-800 truncate">
                                                     {doc.title}
                                                 </p>
                                                 <p className="text-xs text-gray-500">
-                                                    {doc.fileName} · {formatFileSize(doc.fileSize)} · {doc.contentText.length.toLocaleString()} caracteres
+                                                    {doc.fileName} · {formatFileSize(doc.fileSize)}
+                                                    {doc.isPdf && ' · PDF'}
+                                                    {doc.pdfPageCount && ` · ${doc.pdfPageCount} págs.`}
+                                                    {doc.textExtractionMethod === 'native' && ' · Procesado por Gemini'}
+                                                    {doc.textExtractionMethod === 'pdfjs' && ` · ${doc.contentText.length.toLocaleString()} caracteres`}
+                                                    {!doc.isPdf && ` · ${doc.contentText.length.toLocaleString()} caracteres`}
                                                 </p>
                                                 {doc.author && doc.author !== 'No especificado' && (
                                                     <p className="text-xs text-gray-400">Autor: {doc.author}</p>

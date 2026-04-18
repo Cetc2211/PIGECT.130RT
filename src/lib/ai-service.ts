@@ -80,10 +80,16 @@ REGLAS IMPORTANTES:
 - Si no hay datos para una sección, indícalo explícitamente y sugiere qué evaluaciones complementarias serían necesarias.
 - RESPETA el nivel de intervención MTSS asignado (Nivel 1, 2 o 3) y ajusta la intensidad del plan en consecuencia.`;
 
+export interface PdfFileReference {
+    mimeType: string;
+    fileUri: string;
+    title: string;
+}
+
 export async function generateClinicalPlan(
     clinicalContext: string,
     referenceText: string,
-    options?: { temperature?: number }
+    options?: { temperature?: number; pdfFiles?: PdfFileReference[] }
 ): Promise<string> {
     const apiKey = getUserGeminiApiKey();
     if (!apiKey) {
@@ -99,17 +105,43 @@ export async function generateClinicalPlan(
         },
     });
 
-    // Build the user prompt combining clinical data and references
+    // Build the content parts: PDF file references + text prompt
+    const contentParts: any[] = [];
+
+    // Add PDF file references first (Gemini reads them natively)
+    if (options?.pdfFiles && options.pdfFiles.length > 0) {
+        for (const pdfFile of options.pdfFiles) {
+            contentParts.push({
+                fileData: {
+                    mimeType: pdfFile.mimeType,
+                    fileUri: pdfFile.fileUri,
+                },
+            });
+        }
+    }
+
+    // Build the text prompt combining clinical data and references
     let userPrompt = `A continuación se presentan los datos clínicos completos del estudiante. Genera un Plan de Tratamiento Narrativo personalizado siguiendo el formato indicado.\n\n`;
     userPrompt += `--- INICIO DE DATOS CLÍNICOS ---\n\n${clinicalContext}\n\n`;
 
+    if (options?.pdfFiles && options.pdfFiles.length > 0) {
+        userPrompt += `--- BIBLIOGRAFÍA EN ARCHIVOS PDF ---\n\n`;
+        userPrompt += `Se han adjuntado ${options.pdfFiles.length} archivo(s) PDF como referencia bibliográfica:\n`;
+        options.pdfFiles.forEach((pdf, i) => {
+            userPrompt += `  ${i + 1}. "${pdf.title}"\n`;
+        });
+        userPrompt += `\nLee y analiza estos documentos PDF para fundamentar tus intervenciones con las estrategias, técnicas y modelos clínicos descritos en ellos. Cita las fuentes relevantes cuando apliques una estrategia específica.\n\n`;
+    }
+
     if (referenceText && referenceText.trim().length > 0) {
-        userPrompt += `--- INICIO DE BIBLIOGRAFÍA DE REFERENCIA ---\n\n${referenceText}\n\n`;
-        userPrompt += `Utiliza la bibliografía anterior como base teórica para fundamentar tus intervenciones.\n\n`;
+        userPrompt += `--- INICIO DE BIBLIOGRAFÍA DE REFERENCIA (TEXTO) ---\n\n${referenceText}\n\n`;
+        userPrompt += `Utiliza la bibliografía anterior como base teórica complementaria para fundamentar tus intervenciones.\n\n`;
     }
 
     userPrompt += `--- FIN DE DATOS ---\n\nGenera ahora el Plan de Tratamiento Narrativo completo.`;
 
-    const response = await model.generateContent(userPrompt);
+    contentParts.push({ text: userPrompt });
+
+    const response = await model.generateContent(contentParts);
     return response.response.text() || '';
 }
