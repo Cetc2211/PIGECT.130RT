@@ -331,7 +331,7 @@ export default function GroupReportPage() {
       setNarrativeAnalysis(analysisText || '');
       // Note: The server action returns just the text string, so we don't get the model name back directly 
       // unless we change the return type. For now, we assume the requested model was used.
-      setLastUsedModel('gemini-1.5-pro');
+      setLastUsedModel('gemini-2.5-flash');
       
       toast({ title: '¡Análisis generado!', description: `La IA ha completado el análisis del grupo.` });
     } catch(e: any) {
