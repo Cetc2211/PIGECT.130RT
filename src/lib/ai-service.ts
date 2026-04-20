@@ -1,18 +1,14 @@
 'use client';
 
-import { GoogleGenerativeAI, type GoogleGenerativeAIOptions } from '@google/generative-ai';
+// ============================================================================
+// AI SERVICE — Gemini v1 ESTABLE (fetch directo, sin SDK que fuerza v1beta)
+// ============================================================================
 
 export const USER_GEMINI_API_KEY_STORAGE_KEY = 'USER_GEMINI_API_KEY';
 export const AI_KEY_MISSING_MESSAGE = 'Configura tu API Key en Ajustes para activar la IA';
 
-// Fuerza la version estable v1 de la API (NO v1beta) para evitar errores de quota
-const V1_API_OPTIONS: GoogleGenerativeAIOptions = {
-  httpOptions: {
-    baseUrl: 'https://generativelanguage.googleapis.com/v1',
-  },
-};
-
-const CLINICAL_MODEL = 'gemini-1.5-flash'; // Modelo estable, bajo consumo de cuota
+const GEMINI_V1_BASE = 'https://generativelanguage.googleapis.com/v1';
+const CLINICAL_MODEL = 'gemini-1.5-flash';
 
 function safeLocalStorageGet(key: string): string {
   if (typeof window === 'undefined') return '';
@@ -31,16 +27,78 @@ export function hasUserGeminiApiKey(): boolean {
   return getUserGeminiApiKey().length > 0;
 }
 
-export async function generateTextWithUserKey(prompt: string): Promise<string> {
-  const apiKey = getUserGeminiApiKey();
-  if (!apiKey) {
-    throw new Error(AI_KEY_MISSING_MESSAGE);
+// ─── Direct REST API call to Gemini v1 (NO SDK, NO v1beta) ─────────────────
+
+interface GeminiResponse {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{ text?: string }>;
+    };
+  }>;
+  error?: { message?: string; code?: number };
+}
+
+async function callGeminiV1(
+  apiKey: string,
+  model: string,
+  prompt: string,
+  options?: {
+    systemInstruction?: string;
+    temperature?: number;
+    maxOutputTokens?: number;
+    fileDataParts?: Array<{ mimeType: string; fileUri: string }>;
+  }
+): Promise<string> {
+  const url = `${GEMINI_V1_BASE}/models/${model}:generateContent?key=${apiKey}`;
+
+  const contents: any[] = [];
+
+  if (options?.fileDataParts && options.fileDataParts.length > 0) {
+    const parts: any[] = [];
+    for (const fd of options.fileDataParts) {
+      parts.push({ fileData: { mimeType: fd.mimeType, fileUri: fd.fileUri } });
+    }
+    parts.push({ text: prompt });
+    contents.push({ role: 'user', parts });
+  } else {
+    contents.push({ role: 'user', parts: [{ text: prompt }] });
   }
 
-  const client = new GoogleGenerativeAI(apiKey, V1_API_OPTIONS);
-  const model = client.getGenerativeModel({ model: CLINICAL_MODEL });
-  const response = await model.generateContent(prompt);
-  return response.response.text() || '';
+  const body: any = { contents };
+
+  if (options?.systemInstruction) {
+    body.systemInstruction = {
+      parts: [{ text: options.systemInstruction }],
+    };
+  }
+
+  body.generationConfig = {
+    temperature: options?.temperature ?? 0.3,
+    maxOutputTokens: options?.maxOutputTokens ?? 400,
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    const msg = (errorData as any)?.error?.message || `Error de API Gemini v1 (${response.status})`;
+    throw new Error(msg);
+  }
+
+  const data: GeminiResponse = await response.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+}
+
+// ─── Simple text generation ─────────────────────────────────────────────────
+
+export async function generateTextWithUserKey(prompt: string): Promise<string> {
+  const apiKey = getUserGeminiApiKey();
+  if (!apiKey) throw new Error(AI_KEY_MISSING_MESSAGE);
+  return callGeminiV1(apiKey, CLINICAL_MODEL, prompt);
 }
 
 // ─── Clinical Treatment Plan Generation — "Modo Cirujano" ─────────────────────
@@ -68,65 +126,40 @@ export interface PdfFileReference {
     title: string;
 }
 
-/**
- * Genera un Plan de Intervencion optimizado (3 parrafos).
- * Solo recibe motivo_consulta, analisis_clinico y observaciones_actuales para ahorrar tokens.
- */
 export async function generateClinicalPlan(
     leanContext: string,
     options?: { pdfFiles?: PdfFileReference[] }
 ): Promise<string> {
     const apiKey = getUserGeminiApiKey();
-    if (!apiKey) {
-        throw new Error(AI_KEY_MISSING_MESSAGE);
-    }
+    if (!apiKey) throw new Error(AI_KEY_MISSING_MESSAGE);
 
-    const client = new GoogleGenerativeAI(apiKey, V1_API_OPTIONS);
-    const model = client.getGenerativeModel({
-        model: CLINICAL_MODEL,
-        systemInstruction: CLINICAL_SYSTEM_PROMPT,
-        generationConfig: {
-            temperature: 0.3,
-            maxOutputTokens: 400,
-        },
-    });
-
-    // Build the content parts: PDF file references + text prompt
-    const contentParts: any[] = [];
-
-    // Add PDF file references first (Gemini reads them natively)
-    if (options?.pdfFiles && options.pdfFiles.length > 0) {
-        for (const pdfFile of options.pdfFiles) {
-            contentParts.push({
-                fileData: {
-                    mimeType: pdfFile.mimeType,
-                    fileUri: pdfFile.fileUri,
-                },
-            });
-        }
-    }
-
-    // Lean prompt — only 3 fields, minimal tokens
     let userPrompt = `DATOS DEL CASO:\n\n${leanContext}\n\n`;
     userPrompt += `Genera ahora el Plan de Intervencion de 3 parrafos.`;
 
-    contentParts.push({ text: userPrompt });
+    const fileDataParts = options?.pdfFiles?.map(f => ({
+        mimeType: f.mimeType,
+        fileUri: f.fileUri,
+    }));
 
-    const response = await model.generateContent(contentParts);
-    let text = response.response.text() || '';
+    const raw = await callGeminiV1(apiKey, CLINICAL_MODEL, userPrompt, {
+        systemInstruction: CLINICAL_SYSTEM_PROMPT,
+        temperature: 0.3,
+        maxOutputTokens: 400,
+        fileDataParts,
+    });
 
-    // Post-process: clean up any markdown formatting that might slip through
-    text = text.replace(/^#{1,6}\s+/gm, '');           // Remove # headings
-    text = text.replace(/\*\*([^*]+)\*\*/g, '$1');     // Remove **bold**
-    text = text.replace(/\*([^*]+)\*/g, '$1');         // Remove *italic*
-    text = text.replace(/___([^_]+)___/g, '$1');       // Remove ___underline___
-    text = text.replace(/__([^_]+)__/g, '$1');         // Remove __bold__
-    text = text.replace(/---+/g, '');                   // Remove --- separators
-    text = text.replace(/^[-*]\s+/gm, '');              // Remove - or * list markers
-    text = text.replace(/^\s*[a-z]\)\s+/gm, '');       // Remove a) b) c) list markers
-    text = text.replace(/^\s*\d+[.)]\s+/gm, '');       // Remove 1. 2. 3) numbered list markers
-    text = text.replace(/^\s{2,}/gm, '');              // Remove leading whitespace on lines
-    text = text.replace(/\n{3,}/g, '\n\n');            // Collapse excessive newlines
+    let text = raw;
+    text = text.replace(/^#{1,6}\s+/gm, '');
+    text = text.replace(/\*\*([^*]+)\*\*/g, '$1');
+    text = text.replace(/\*([^*]+)\*/g, '$1');
+    text = text.replace(/___([^_]+)___/g, '$1');
+    text = text.replace(/__([^_]+)__/g, '$1');
+    text = text.replace(/---+/g, '');
+    text = text.replace(/^[-*]\s+/gm, '');
+    text = text.replace(/^\s*[a-z]\)\s+/gm, '');
+    text = text.replace(/^\s*\d+[.)]\s+/gm, '');
+    text = text.replace(/^\s{2,}/gm, '');
+    text = text.replace(/\n{3,}/g, '\n\n');
     text = text.trim();
 
     return text;
