@@ -1,7 +1,7 @@
 'use client';
 
 // ============================================================================
-// AI SERVICE — Gemini v1 ESTABLE (fetch directo, sin SDK que fuerza v1beta)
+// AI SERVICE — Gemini v1 ESTABLE (fetch directo, sin SDK)
 // ============================================================================
 
 export const USER_GEMINI_API_KEY_STORAGE_KEY = 'USER_GEMINI_API_KEY';
@@ -27,8 +27,6 @@ export function hasUserGeminiApiKey(): boolean {
   return getUserGeminiApiKey().length > 0;
 }
 
-// ─── Direct REST API call to Gemini v1 (NO SDK, NO v1beta) ─────────────────
-
 interface GeminiResponse {
   candidates?: Array<{
     content?: {
@@ -43,7 +41,6 @@ async function callGeminiV1(
   model: string,
   prompt: string,
   options?: {
-    systemInstruction?: string;
     temperature?: number;
     maxOutputTokens?: number;
     fileDataParts?: Array<{ mimeType: string; fileUri: string }>;
@@ -64,17 +61,12 @@ async function callGeminiV1(
     contents.push({ role: 'user', parts: [{ text: prompt }] });
   }
 
-  const body: any = { contents };
-
-  if (options?.systemInstruction) {
-    body.systemInstruction = {
-      parts: [{ text: options.systemInstruction }],
-    };
-  }
-
-  body.generationConfig = {
-    temperature: options?.temperature ?? 0.3,
-    maxOutputTokens: options?.maxOutputTokens ?? 400,
+  const body: any = {
+    contents,
+    generationConfig: {
+      temperature: options?.temperature ?? 0.3,
+      maxOutputTokens: options?.maxOutputTokens ?? 400,
+    },
   };
 
   const response = await fetch(url, {
@@ -103,7 +95,8 @@ export async function generateTextWithUserKey(prompt: string): Promise<string> {
 
 // ─── Clinical Treatment Plan Generation — "Modo Cirujano" ─────────────────────
 
-const CLINICAL_SYSTEM_PROMPT = `Actua como un psicologo clinico breve. Analiza el caso y responde UNICAMENTE con 3 parrafos concisos:
+const CLINICAL_INSTRUCTIONS = `INSTRUCCIONES PARA EL PLAN DE INTERVENCION:
+Actua como un psicologo clinico breve. Analiza el caso y responde UNICAMENTE con 3 parrafos concisos:
 
 Parrafo 1: Conducta prioritaria a modificar.
 Parrafo 2: Estrategia tecnica a utilizar.
@@ -118,7 +111,9 @@ REGLAS DE FORMATO (OBLIGATORIAS):
 - Los titulos de seccion se escriben UNICAMENTE en mayusculas, sin subrayar ni decorar.
 - PROHIBIDO usar negritas, cursivas ni formato especial.
 - NUNCA menciones que eres una IA.
-- Escribe como si el informe fuera firmado por un psicologo clinico real.`;
+- Escribe como si el informe fuera firmado por un psicologo clinico real.
+
+DATOS DEL CASO:`;
 
 export interface PdfFileReference {
     mimeType: string;
@@ -133,8 +128,8 @@ export async function generateClinicalPlan(
     const apiKey = getUserGeminiApiKey();
     if (!apiKey) throw new Error(AI_KEY_MISSING_MESSAGE);
 
-    let userPrompt = `DATOS DEL CASO:\n\n${leanContext}\n\n`;
-    userPrompt += `Genera ahora el Plan de Intervencion de 3 parrafos.`;
+    // Embed instructions directly in the prompt (v1 compatible)
+    const userPrompt = `${CLINICAL_INSTRUCTIONS}\n\n${leanContext}\n\nGenera ahora el Plan de Intervencion de 3 parrafos.`;
 
     const fileDataParts = options?.pdfFiles?.map(f => ({
         mimeType: f.mimeType,
@@ -142,7 +137,6 @@ export async function generateClinicalPlan(
     }));
 
     const raw = await callGeminiV1(apiKey, CLINICAL_MODEL, userPrompt, {
-        systemInstruction: CLINICAL_SYSTEM_PROMPT,
         temperature: 0.3,
         maxOutputTokens: 400,
         fileDataParts,
