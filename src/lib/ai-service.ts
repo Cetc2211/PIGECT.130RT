@@ -1,14 +1,11 @@
 'use client';
 
-// ============================================================================
-// AI SERVICE — Gemini v1 ESTABLE (fetch directo, sin SDK)
-// ============================================================================
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export const USER_GEMINI_API_KEY_STORAGE_KEY = 'USER_GEMINI_API_KEY';
 export const AI_KEY_MISSING_MESSAGE = 'Configura tu API Key en Ajustes para activar la IA';
 
-const GEMINI_V1_BASE = 'https://generativelanguage.googleapis.com/v1';
-const CLINICAL_MODEL = 'gemini-1.5-flash';
+const CLINICAL_MODEL = 'gemini-2.5-flash';
 
 function safeLocalStorageGet(key: string): string {
   if (typeof window === 'undefined') return '';
@@ -27,76 +24,18 @@ export function hasUserGeminiApiKey(): boolean {
   return getUserGeminiApiKey().length > 0;
 }
 
-interface GeminiResponse {
-  candidates?: Array<{
-    content?: {
-      parts?: Array<{ text?: string }>;
-    };
-  }>;
-  error?: { message?: string; code?: number };
-}
-
-async function callGeminiV1(
-  apiKey: string,
-  model: string,
-  prompt: string,
-  options?: {
-    temperature?: number;
-    maxOutputTokens?: number;
-    fileDataParts?: Array<{ mimeType: string; fileUri: string }>;
-  }
-): Promise<string> {
-  const url = `${GEMINI_V1_BASE}/models/${model}:generateContent?key=${apiKey}`;
-
-  const contents: any[] = [];
-
-  if (options?.fileDataParts && options.fileDataParts.length > 0) {
-    const parts: any[] = [];
-    for (const fd of options.fileDataParts) {
-      parts.push({ fileData: { mimeType: fd.mimeType, fileUri: fd.fileUri } });
-    }
-    parts.push({ text: prompt });
-    contents.push({ role: 'user', parts });
-  } else {
-    contents.push({ role: 'user', parts: [{ text: prompt }] });
-  }
-
-  const body: any = {
-    contents,
-    generationConfig: {
-      temperature: options?.temperature ?? 0.3,
-      maxOutputTokens: options?.maxOutputTokens ?? 400,
-    },
-  };
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    const msg = (errorData as any)?.error?.message || `Error de API Gemini v1 (${response.status})`;
-    throw new Error(msg);
-  }
-
-  const data: GeminiResponse = await response.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-}
-
-// ─── Simple text generation ─────────────────────────────────────────────────
-
 export async function generateTextWithUserKey(prompt: string): Promise<string> {
   const apiKey = getUserGeminiApiKey();
   if (!apiKey) throw new Error(AI_KEY_MISSING_MESSAGE);
-  return callGeminiV1(apiKey, CLINICAL_MODEL, prompt);
+  const client = new GoogleGenerativeAI(apiKey);
+  const model = client.getGenerativeModel({ model: CLINICAL_MODEL });
+  const response = await model.generateContent(prompt);
+  return response.response.text() || '';
 }
 
 // ─── Clinical Treatment Plan Generation — "Modo Cirujano" ─────────────────────
 
-const CLINICAL_INSTRUCTIONS = `INSTRUCCIONES PARA EL PLAN DE INTERVENCION:
-Actua como un psicologo clinico breve. Analiza el caso y responde UNICAMENTE con 3 parrafos concisos:
+const CLINICAL_SYSTEM_PROMPT = `Actua como un psicologo clinico breve. Analiza el caso y responde UNICAMENTE con 3 parrafos concisos:
 
 Parrafo 1: Conducta prioritaria a modificar.
 Parrafo 2: Estrategia tecnica a utilizar.
@@ -111,9 +50,7 @@ REGLAS DE FORMATO (OBLIGATORIAS):
 - Los titulos de seccion se escriben UNICAMENTE en mayusculas, sin subrayar ni decorar.
 - PROHIBIDO usar negritas, cursivas ni formato especial.
 - NUNCA menciones que eres una IA.
-- Escribe como si el informe fuera firmado por un psicologo clinico real.
-
-DATOS DEL CASO:`;
+- Escribe como si el informe fuera firmado por un psicologo clinico real.`;
 
 export interface PdfFileReference {
     mimeType: string;
@@ -128,21 +65,37 @@ export async function generateClinicalPlan(
     const apiKey = getUserGeminiApiKey();
     if (!apiKey) throw new Error(AI_KEY_MISSING_MESSAGE);
 
-    // Embed instructions directly in the prompt (v1 compatible)
-    const userPrompt = `${CLINICAL_INSTRUCTIONS}\n\n${leanContext}\n\nGenera ahora el Plan de Intervencion de 3 parrafos.`;
-
-    const fileDataParts = options?.pdfFiles?.map(f => ({
-        mimeType: f.mimeType,
-        fileUri: f.fileUri,
-    }));
-
-    const raw = await callGeminiV1(apiKey, CLINICAL_MODEL, userPrompt, {
-        temperature: 0.3,
-        maxOutputTokens: 400,
-        fileDataParts,
+    const client = new GoogleGenerativeAI(apiKey);
+    const model = client.getGenerativeModel({
+        model: CLINICAL_MODEL,
+        systemInstruction: CLINICAL_SYSTEM_PROMPT,
+        generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: 400,
+        },
     });
 
-    let text = raw;
+    const contentParts: any[] = [];
+
+    if (options?.pdfFiles && options.pdfFiles.length > 0) {
+        for (const pdfFile of options.pdfFiles) {
+            contentParts.push({
+                fileData: {
+                    mimeType: pdfFile.mimeType,
+                    fileUri: pdfFile.fileUri,
+                },
+            });
+        }
+    }
+
+    let userPrompt = `DATOS DEL CASO:\n\n${leanContext}\n\n`;
+    userPrompt += `Genera ahora el Plan de Intervencion de 3 parrafos.`;
+
+    contentParts.push({ text: userPrompt });
+
+    const response = await model.generateContent(contentParts);
+    let text = response.response.text() || '';
+
     text = text.replace(/^#{1,6}\s+/gm, '');
     text = text.replace(/\*\*([^*]+)\*\*/g, '$1');
     text = text.replace(/\*([^*]+)\*/g, '$1');
