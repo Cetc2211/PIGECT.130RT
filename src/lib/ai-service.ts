@@ -71,7 +71,7 @@ export async function generateClinicalPlan(
         systemInstruction: CLINICAL_SYSTEM_PROMPT,
         generationConfig: {
             temperature: 0.3,
-            maxOutputTokens: 400,
+            maxOutputTokens: 800,
         },
     });
 
