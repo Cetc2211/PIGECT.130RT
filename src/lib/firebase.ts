@@ -1,3 +1,4 @@
+// TODO(v2): eliminar dependencia Firebase — será removido en Fase 1
 // ============================================
 // Firebase Stubs — 100% Local Mode
 // ============================================

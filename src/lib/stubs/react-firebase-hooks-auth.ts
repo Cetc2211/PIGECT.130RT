@@ -1,3 +1,4 @@
+// TODO(v2): eliminar dependencia Firebase — será removido en Fase 1
 // Stub for react-firebase-hooks/auth — returns unauthenticated state
 import { useState, useEffect } from 'react';
 

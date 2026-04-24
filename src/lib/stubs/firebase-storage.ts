@@ -1,3 +1,4 @@
+// TODO(v2): eliminar dependencia Firebase — será removido en Fase 1
 // Stub for firebase/storage — no-op implementations for 100% local mode
 export const getStorage = () => null;
 export const ref = (_storage: unknown, _path?: string) => ({ fullPath: 'stub/path', name: 'stub' });

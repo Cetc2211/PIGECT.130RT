@@ -1,3 +1,4 @@
+// TODO(v2): eliminar dependencia Firebase — será removido en Fase 1
 // Stub for firebase/auth — no-op implementations for 100% local mode
 export const getAuth = () => null;
 export const signInWithEmailAndPassword = async (_auth: unknown, _email: string, _password: string) => ({ user: null });

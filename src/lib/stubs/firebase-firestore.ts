@@ -1,3 +1,4 @@
+// TODO(v2): eliminar dependencia Firebase — será removido en Fase 1
 // Stub for firebase/firestore — no-op implementations for 100% local mode
 const noop = async () => undefined;
 const noopReturn = () => ({});
