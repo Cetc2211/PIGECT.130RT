@@ -1,7 +1,12 @@
 /**
- * Define los coeficientes ponderados (Betas) para las variables predictoras (Xi).
- * NOTA: Estos coeficientes son simulados y deben ajustarse con la investigación real del Cap. 5.1.1.
+ * Funciones de análisis de riesgo académico.
+ * 
+ * - calculateRisk: Cálculo del IRC (Índice de Riesgo Compuesto) con regresión logística.
+ * - analyzeStudentRisk: Análisis simple legacy basado en scores de pruebas.
+ * - analyzeStudentRiskFull: Análisis completo con grado, asistencia, factores clínicos.
  */
+
+import type { CalculatedRisk, RiskLevel } from '@/types/risk';
 import type { PartialData } from './placeholder-data';
 
 interface RiskCoefficients {
@@ -90,34 +95,37 @@ export function analyzeStudentRiskSimple(testResults: Array<{ score?: number }>)
     return { level, totalScore, count: testResults.length };
 }
 
-// Rename the old export for backward compat
+// Alias de compatibilidad
 export { analyzeStudentRiskSimple as analyzeStudentRisk };
 
 /**
- * Return type for the full analyzeStudentRisk function.
+ * Parámetros para el análisis de riesgo completo.
  */
-export type StudentRiskAnalysis = {
-    riskLevel: 'low' | 'medium' | 'high';
-    currentGrade: number;
-    currentAttendance: number;
-    isRecovery: boolean;
-    riskFactors: string[];
-    failingRisk: number;
-    dropoutRisk: number;
-    predictionMessage: string;
-};
+export interface AnalyzeRiskParams {
+    student: {
+        id: string;
+        gad7Score?: number;
+        neuropsiTotal?: number;
+        neuropsiScore?: number;
+    };
+    partialData: PartialData;
+    criteria: Array<{ id: string; name: string; weight: number; expectedValue: number; isActive?: boolean }>;
+    totalClasses: number;
+    observations?: string[];
+    semesterGradeOverride?: number;
+}
 
-// Re-export the full analysis function under the same name for callers that need the expanded signature.
-// We use declaration merging: the default export of analyzeStudentRisk (above) is the simple version.
-// The full version is available as analyzeStudentRiskFull.
-export function analyzeStudentRiskFull(
-    student: { id: string; gad7Score?: number; neuropsiTotal?: number; neuropsiScore?: number },
-    partialData: PartialData,
-    criteria: Array<{ id: string; name: string; weight: number; expectedValue: number; isActive?: boolean }>,
-    totalClasses: number,
-    observations?: string[],
-    semesterGradeOverride?: number
-): StudentRiskAnalysis {
+/**
+ * Análisis completo de riesgo estudiantil.
+ * 
+ * Calcula calificación actual, asistencia, factores de riesgo clínicos y académicos,
+ * y produce métricas de riesgo de reprobación y deserción.
+ * 
+ * Devuelve CalculatedRisk unificado con campos de compatibilidad (level, reason, count).
+ */
+export function analyzeStudentRiskFull(params: AnalyzeRiskParams): CalculatedRisk {
+    const { student, partialData, criteria, totalClasses, observations, semesterGradeOverride } = params;
+
     // --- Calculate current grade ---
     let isRecovery = false;
     let currentGrade: number;
@@ -224,7 +232,7 @@ export function analyzeStudentRiskFull(
     }
 
     // --- Determine risk level ---
-    let riskLevel: 'low' | 'medium' | 'high';
+    let riskLevel: RiskLevel;
 
     if (riskFactors.length === 0 && currentGrade >= 80 && currentAttendance >= 90) {
         riskLevel = 'low';
@@ -269,11 +277,11 @@ export function analyzeStudentRiskFull(
     // --- Generate prediction message ---
     let predictionMessage: string;
     if (riskLevel === 'high') {
-        predictionMessage = '⚠️ Alto riesgo detectado. Se requiere intervención inmediata y seguimiento estrecho.';
+        predictionMessage = 'Alto riesgo detectado. Se requiere intervención inmediata y seguimiento estrecho.';
     } else if (riskLevel === 'medium') {
-        predictionMessage = '🔶 Riesgo moderado. Se recomienda monitoreo y posible referencia a orientación.';
+        predictionMessage = 'Riesgo moderado. Se recomienda monitoreo y posible referencia a orientación.';
     } else {
-        predictionMessage = '✅ Rendimiento adecuado. Continuar con seguimiento regular.';
+        predictionMessage = 'Rendimiento adecuado. Continuar con seguimiento regular.';
     }
 
     if (isRecovery) {
@@ -281,13 +289,92 @@ export function analyzeStudentRiskFull(
     }
 
     return {
+        // Full analysis fields
         riskLevel,
+        totalScore: riskFactors.length > 0 ? Math.round((failingRisk + dropoutRisk) / 2) : 0,
+        failingRisk,
+        dropoutRisk,
+        riskFactors,
         currentGrade,
         currentAttendance,
         isRecovery,
-        riskFactors,
+        predictionMessage,
+        
+        // Backward-compatible aliases
+        level: riskLevel,
+        count: riskFactors.length,
+        reason: riskFactors.length > 0 ? riskFactors.join('. ') : predictionMessage,
+        
+        // Metadata
+        calculatedAt: new Date().toISOString(),
+    };
+}
+
+/**
+ * Versión simplificada de análisis de riesgo.
+ * Wrapper que construye una respuesta CalculatedRisk basándose solo en
+ * calificación y asistencia, sin necesidad de partialData completo.
+ * 
+ * Útil para at-risk reports y otros consumidores que solo tienen
+ * calificación y asistencia.
+ */
+export function getSimpleRiskLevel(finalGrade: number, pAttendance: Record<string, Record<string, boolean>>, studentId: string): CalculatedRisk {
+    const days = Object.keys(pAttendance).filter(d => Object.prototype.hasOwnProperty.call(pAttendance[d], studentId));
+    const attended = days.reduce((count, d) => pAttendance[d][studentId] === true ? count + 1 : count, 0);
+    const attendanceRate = days.length > 0 ? (attended / days.length) * 100 : 100;
+
+    const riskFactors: string[] = [];
+    if (finalGrade <= 59) {
+        riskFactors.push(`Calificación reprobatoria (${finalGrade.toFixed(0)}%)`);
+    }
+    if (attendanceRate < 80) {
+        riskFactors.push(`Asistencia baja (${attendanceRate.toFixed(0)}%)`);
+    }
+
+    let riskLevel: RiskLevel;
+    let failingRisk: number;
+    let dropoutRisk: number;
+    let predictionMessage: string;
+
+    if (riskFactors.length > 0) {
+        riskLevel = 'high';
+        failingRisk = finalGrade < 50 ? 85 : finalGrade < 60 ? 70 : 40;
+        dropoutRisk = attendanceRate < 70 ? 60 : 30;
+        predictionMessage = riskFactors.join('. ');
+    } else if (finalGrade > 59 && finalGrade <= 70) {
+        riskLevel = 'medium';
+        failingRisk = 15;
+        dropoutRisk = 5;
+        predictionMessage = `Calificación baja (${finalGrade.toFixed(0)}%).`;
+    } else {
+        riskLevel = 'low';
+        failingRisk = 5;
+        dropoutRisk = 3;
+        predictionMessage = 'Rendimiento adecuado';
+    }
+
+    // Boost risks based on attendance
+    if (attendanceRate < 70) {
+        failingRisk = Math.min(95, failingRisk + 15);
+        dropoutRisk = Math.min(80, dropoutRisk + 20);
+    } else if (attendanceRate < 80) {
+        failingRisk = Math.min(95, failingRisk + 8);
+        dropoutRisk = Math.min(80, dropoutRisk + 10);
+    }
+
+    return {
+        riskLevel,
+        totalScore: riskFactors.length > 0 ? Math.round((failingRisk + dropoutRisk) / 2) : 0,
         failingRisk,
         dropoutRisk,
+        riskFactors,
+        currentGrade: finalGrade,
+        currentAttendance: attendanceRate,
+        isRecovery: false,
         predictionMessage,
+        level: riskLevel,
+        count: riskFactors.length,
+        reason: predictionMessage,
+        calculatedAt: new Date().toISOString(),
     };
 }

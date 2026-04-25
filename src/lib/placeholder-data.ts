@@ -191,12 +191,11 @@ export type AllPartialsData = {
 };
 
 
-export type CalculatedRisk = {
-    level: 'low' | 'medium' | 'high';
-    reason: string;
-};
+/** @deprecated Import CalculatedRisk from '@/types/risk' instead */
+export type { CalculatedRisk } from '@/types/risk';
+export type { RiskLevel } from '@/types/risk';
 
-export type StudentWithRisk = Student & { calculatedRisk: CalculatedRisk };
+export type StudentWithRisk = Student & { calculatedRisk: import('@/types/risk').CalculatedRisk };
 
 export type CriteriaDetail = {
     name: string;

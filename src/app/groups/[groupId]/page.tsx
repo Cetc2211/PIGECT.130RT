@@ -192,18 +192,15 @@ export default function GroupDetailsPage() {
       // Calculamos el total de clases registradas para pasar como parámetro
       const totalClassesRegistered = Object.keys(partialData.attendance || {}).length;
       
-      const analysis = analyzeStudentRiskFull(
-          s, 
+      const analysis = analyzeStudentRiskFull({
+          student: s, 
           partialData, 
-          activeGroup.criteria || [], 
-          totalClassesRegistered,
-          allObservations[s.id]?.map(o => o.details) || []
-      );
+          criteria: activeGroup.criteria || [], 
+          totalClasses: totalClassesRegistered,
+          observations: allObservations[s.id]?.map(o => o.details) || []
+      });
 
-      riskMap[s.id] = {
-          level: analysis.riskLevel,
-          reason: analysis.riskFactors.join(', ')
-      };
+      riskMap[s.id] = analysis;
     });
     return riskMap;
   }, [activeGroup, partialData, allObservations]); 
@@ -235,13 +232,13 @@ export default function GroupDetailsPage() {
               // Si no hay datos y no hay clases registradas, ignoramos
               if (!hasData && pTotalClasses === 0) return null;
 
-              const pAnalysis = analyzeStudentRiskFull(
+              const pAnalysis = analyzeStudentRiskFull({
                   student,
-                  pData,
-                  activeGroup.criteria || [],
-                  pTotalClasses,
-                  [] // No necesitamos observaciones para el historial numérico
-              );
+                  partialData: pData,
+                  criteria: activeGroup.criteria || [],
+                  totalClasses: pTotalClasses,
+                  observations: []
+              });
               
               // Si el análisis devuelve 100 pero no hay datos reales (beneficio de la duda), 
               // y estamos en modo histórico, tal vez deberíamos filtrarlo si realmente está vacío?
@@ -263,19 +260,19 @@ export default function GroupDetailsPage() {
           // Calcular promedio semestral si está integrado
           let semesterGradeOverride: number | undefined = undefined;
           if (activeGroup.isSemesterIntegrated && history.length > 0) {
-              const sum = history.reduce((acc, h) => acc + h.grade, 0);
+              const sum = history.reduce((acc, h) => acc + (h.grade ?? 0), 0);
               semesterGradeOverride = sum / history.length;
           }
 
           // Usamos la función avanzada directamente para la tabla detallada
-          const analysis = analyzeStudentRiskFull(
+          const analysis = analyzeStudentRiskFull({
               student, 
               partialData, 
-              activeGroup.criteria || [], 
-              totalClassesRegistered,
-              allObservations[student.id]?.map(o => o.details) || [],
+              criteria: activeGroup.criteria || [], 
+              totalClasses: totalClassesRegistered,
+              observations: allObservations[student.id]?.map(o => o.details) || [],
               semesterGradeOverride
-          );
+          });
           
           return {
               studentId: student.id,

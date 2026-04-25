@@ -126,7 +126,7 @@ export default function PigecSimulationPage() {
 
                             // Run Risk Analysis
                             // Passed empty criteria and 0 classes to satisfy signature, as we focus on PIGEC override
-                            const risk = analyzeStudentRiskFull(student, MOCK_PARTIAL_DATA, [], 0, obsStrings);
+                            const risk = analyzeStudentRiskFull({ student, partialData: MOCK_PARTIAL_DATA, criteria: [], totalClasses: 0, observations: obsStrings });
 
                             return (
                                 <Card key={student.id} className={`border-t-4 ${risk.riskLevel === 'high' ? 'border-red-500' : 'border-gray-300'}`}>

@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { get, set, del, clear } from 'idb-keyval';
 import type { Student, Group, OfficialGroup, PartialId, StudentObservation, SpecialNote, EvaluationCriteria, GradeDetail, Grades, RecoveryGrade, RecoveryGrades, MeritGrade, MeritGrades, AttendanceRecord, ParticipationRecord, Activity, ActivityRecord, CalculatedRisk, StudentWithRisk, CriteriaDetail, StudentStats, GroupedActivities, AppSettings, PartialData, AllPartialsData, AllPartialsDataForGroup, Announcement, StudentJustification, JustificationCategory } from '@/lib/placeholder-data';
+import { getSimpleRiskLevel } from '@/lib/risk-analysis';
 import { DEFAULT_MODEL, normalizeModel } from '@/lib/ai-models';
 import { useToast } from '@/hooks/use-toast';
 import { getOfficialGroupStructures, saveOfficialGroupStructure } from '@/lib/storage-local';
@@ -804,27 +805,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, [activeGroup, activePartialId, allPartialsData, calculateDetailedFinalGrade]);
 
     const getStudentRiskLevel = useCallback((finalGrade: number, pAttendance: AttendanceRecord, studentId: string): CalculatedRisk => {
-        const days = Object.keys(pAttendance).filter(d => Object.prototype.hasOwnProperty.call(pAttendance[d], studentId));
-        const attended = days.reduce((count, d) => pAttendance[d][studentId] === true ? count + 1 : count, 0);
-        const attendanceRate = days.length > 0 ? (attended / days.length) * 100 : 100;
-        
-        let reason = [];
-        if (finalGrade <= 59) {
-            reason.push(`Calificación reprobatoria (${finalGrade.toFixed(0)}%).`);
-        }
-        if (attendanceRate < 80) {
-            reason.push(`Asistencia baja (${attendanceRate.toFixed(0)}%).`);
-        }
-        
-        if (reason.length > 0) {
-            return { level: 'high', reason: reason.join(' ') };
-        }
-        
-        if (finalGrade > 59 && finalGrade <= 70) {
-            return { level: 'medium', reason: `Calificación baja (${finalGrade.toFixed(0)}%).` };
-        }
-        
-        return { level: 'low', reason: 'Rendimiento adecuado' };
+        return getSimpleRiskLevel(finalGrade, pAttendance, studentId);
     }, []);
 
     const groupAverages = useMemo(() => {
@@ -1003,7 +984,7 @@ export const useData = (): DataContextType => {
 
                 calculateFinalGrade: () => 0,
                 calculateDetailedFinalGrade: () => ({ finalGrade: 0, criteriaDetails: [], isRecovery: false }),
-                getStudentRiskLevel: () => ({ level: 'low', reason: 'Rendimiento adecuado' }),
+                getStudentRiskLevel: () => ({ riskLevel: 'low', totalScore: 0, failingRisk: 0, dropoutRisk: 0, riskFactors: [], currentGrade: 100, currentAttendance: 100, isRecovery: false, predictionMessage: 'Rendimiento adecuado', level: 'low', count: 0, reason: 'Rendimiento adecuado', calculatedAt: new Date().toISOString() }),
                 fetchPartialData: async () => null,
                 triggerPedagogicalCheck: noopSync,
                 syncPublicData: noopAsync,
