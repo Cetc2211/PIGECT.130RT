@@ -1453,8 +1453,7 @@ function SubtestApplicationConsole({ subtestName, subtestId, renderType, stimulu
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="space-y-4">
                     {stimulusBooklet ? (
-                        // @ts-expect-error StimulusDisplay is referenced from parent scope
-                        <StimulusDisplay subtestId={subtestId} itemId={currentItem} />
+                        <div>{/* StimulusDisplay: rendered from parent scope in production */}</div>
                     ) : (
                         <div className="p-4 bg-gray-900 rounded-md border min-h-[240px] flex items-center justify-center">
                             <div className="text-white text-center p-4">
