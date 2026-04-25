@@ -7,8 +7,7 @@
  * - WiscReportOutput: El tipo de salida para el flujo.
  */
 
-import {ai} from '@/ai/genkit';
-import {z} from 'zod';
+import {ai, z} from '@/ai/genkit';
 
 export const WiscReportInputSchema = z.object({
     studentName: z.string().describe('Nombre del evaluado.'),
@@ -32,9 +31,7 @@ export type WiscReportOutput = z.infer<typeof WiscReportOutputSchema>;
 const reportGenerationPrompt = ai.definePrompt({
     name: 'wiscReportPrompt',
     model: 'googleai/gemini-2.5-flash',
-    // @ts-expect-error zod version mismatch: ZodObject missing ~standard and ~validate
     input: { schema: WiscReportInputSchema },
-    // @ts-expect-error zod version mismatch: ZodObject missing ~standard and ~validate
     output: { schema: WiscReportOutputSchema },
     config: {
         temperature: 0.7,
@@ -63,9 +60,7 @@ Instrucciones de Redacción:
 const wiscReportFlow = ai.defineFlow(
     {
         name: 'wiscReportFlow',
-        // @ts-expect-error zod version mismatch: ZodObject not assignable to ZodType
         inputSchema: WiscReportInputSchema,
-        // @ts-expect-error zod version mismatch: ZodObject not assignable to ZodType
         outputSchema: WiscReportOutputSchema,
     },
     async (input) => {
