@@ -7,8 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+
 import { useData } from '@/hooks/use-data';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Save, Settings, Upload, X } from 'lucide-react';
@@ -48,15 +47,14 @@ export function TrackingSettingsDialog({ open, onOpenChange, onSettingsUpdated }
     const loadSettings = async () => {
       setLoading(true);
       try {
-        const docRef = doc(db, 'app_config', 'tracking_settings');
-        const docSnap = await getDoc(docRef);
-        
-        if (docSnap.exists()) {
-          const data = docSnap.data() as TrackingSettings;
+        // Load from localStorage
+        const TRACKING_SETTINGS_KEY = 'pigec_tracking_settings';
+        const raw = localStorage.getItem(TRACKING_SETTINGS_KEY);
+        if (raw) {
+          const data = JSON.parse(raw) as TrackingSettings;
           setContactPhones(data.contactPhones || '');
           setTutorMessageTemplate(data.tutorMessageTemplate || DEFAULT_TUTOR_MESSAGE);
         } else {
-          // Defaults if not set
           setTutorMessageTemplate(DEFAULT_TUTOR_MESSAGE);
         }
       } catch (error) {
@@ -93,8 +91,9 @@ export function TrackingSettingsDialog({ open, onOpenChange, onSettingsUpdated }
         tutorMessageTemplate
       };
 
-      const docRef = doc(db, 'app_config', 'tracking_settings');
-      await setDoc(docRef, globalSettings, { merge: true });
+      // Save tracking settings to localStorage
+      const TRACKING_SETTINGS_KEY = 'pigec_tracking_settings';
+      localStorage.setItem(TRACKING_SETTINGS_KEY, JSON.stringify(globalSettings));
 
       // 2. Save User Identity Settings
       if (settings) {

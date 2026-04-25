@@ -8,10 +8,6 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "./ui/textarea";
 import { ClinicalAssessment } from "@/lib/store";
 import { useEffect, useMemo, useState } from "react";
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth, db } from "@/lib/firebase";
-import { collection, getDocs, query, where } from "firebase/firestore";
-import { AlertTriangle, CheckCircle2, Clock, FileText, Loader2 } from "lucide-react";
 import { getTestResults, saveClinicalAssessment } from '@/lib/storage-local';
 import type { Expediente } from '@/lib/expediente-service';
 
@@ -172,7 +168,6 @@ function mergeByCanonicalLatest(results: TestResult[]): TestResult[] {
 }
 
 export default function ClinicalAssessmentForm({ initialData, studentId, expediente }: ClinicalAssessmentFormProps) {
-    const [user, authLoading] = useAuthState(auth);
     const [saving, setSaving] = useState(false);
     const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
@@ -199,7 +194,7 @@ export default function ClinicalAssessmentForm({ initialData, studentId, expedie
 
     useEffect(() => {
         async function loadTestResults() {
-            if (!studentId || authLoading) return;
+            if (!studentId) return;
 
             const localResults = getTestResults<any>()
                 .filter((item) => item.studentId === studentId)
@@ -221,68 +216,13 @@ export default function ClinicalAssessmentForm({ initialData, studentId, expedie
 
             const mergedLocalAndExpediente = mergeByCanonicalLatest([...localResults, ...expedienteEvaluations]);
 
-            if (mergedLocalAndExpediente.length > 0) {
-                setTestResults(mergedLocalAndExpediente);
-                setLoadError(null);
-                setLoadingResults(false);
-                return;
-            }
-
-            if (!db || !user) {
-                setTestResults([]);
-                setLoadError(null);
-                setLoadingResults(false);
-                return;
-            }
-
-            setLoadingResults(true);
+            setTestResults(mergedLocalAndExpediente);
             setLoadError(null);
-
-            try {
-                // Evita depender de índice compuesto (where + orderBy en campos distintos)
-                // y ordena en memoria por fecha de envío.
-                const q = query(
-                    collection(db, 'test_results'),
-                    where('studentId', '==', studentId)
-                );
-                const snapshot = await getDocs(q);
-                type SortableResult = TestResult & { _sortDate: Date };
-                const rawResults: SortableResult[] = [];
-                snapshot.forEach(doc => {
-                    const data = doc.data();
-                    const sortDate = data.submittedAt?.toDate?.() || data.date?.toDate?.() || new Date(0);
-                    rawResults.push({
-                        id: doc.id,
-                        testType: data.testType || data.type || 'Desconocida',
-                        canonicalType: canonicalizeTestType(data.testType || data.type || 'Desconocida'),
-                        score: data.score || data.totalScore || data.totalRisk || data.totalRiesgo || 0,
-                        interpretation: data.interpretation || data.interpretacion || data.level || data.riskLevel || '',
-                        date: sortDate.toLocaleDateString('es-MX'),
-                        alerts: data.alerts || [],
-                        _sortDate: sortDate,
-                    });
-                });
-
-                rawResults.sort((a, b) => b._sortDate.getTime() - a._sortDate.getTime());
-
-                const remoteResults = rawResults.map(({ _sortDate, ...rest }) => rest);
-                setTestResults(mergeByCanonicalLatest([...remoteResults, ...expedienteEvaluations]));
-            } catch (err) {
-                console.error('Error cargando resultados de pruebas:', err);
-                const errorMessage = (err as any)?.message || '';
-                if (errorMessage.includes('Missing or insufficient permissions') || errorMessage.includes('PERMISSION_DENIED')) {
-                    setLoadError(null);
-                } else {
-                    setLoadError(null);
-                }
-                setTestResults(mergeByCanonicalLatest([...expedienteEvaluations]));
-            }
-
             setLoadingResults(false);
         }
 
         loadTestResults();
-    }, [authLoading, expedienteEvaluations, studentId, user]);
+    }, [expedienteEvaluations, studentId]);
 
     const screeningEmocionalResults = useMemo(() => {
         return testResults.filter((result) => !isPsychopedagogicalTest(result.canonicalType || result.testType));
