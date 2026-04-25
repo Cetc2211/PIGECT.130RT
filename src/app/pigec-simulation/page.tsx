@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { simulatePigecInjection } from '@/lib/pigec-simulation';
-import { analyzeStudentRisk } from '@/lib/risk-analysis';
+import { analyzeStudentRiskFull } from '@/lib/risk-analysis';
 import { Student, PartialData, StudentObservation } from '@/lib/placeholder-data';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 
@@ -126,7 +126,7 @@ export default function PigecSimulationPage() {
 
                             // Run Risk Analysis
                             // Passed empty criteria and 0 classes to satisfy signature, as we focus on PIGEC override
-                            const risk = analyzeStudentRisk(student, MOCK_PARTIAL_DATA, [], 0, obsStrings);
+                            const risk = analyzeStudentRiskFull(student, MOCK_PARTIAL_DATA, [], 0, obsStrings);
 
                             return (
                                 <Card key={student.id} className={`border-t-4 ${risk.riskLevel === 'high' ? 'border-red-500' : 'border-gray-300'}`}>

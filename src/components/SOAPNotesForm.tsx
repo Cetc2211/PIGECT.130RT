@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { FileText, Save } from 'lucide-react';
 import { Separator } from './ui/separator';
 
-export default function SOAPNotesForm() {
+export default function SOAPNotesForm({ studentId: _studentId }: { studentId?: string }) {
     const [soapNote, setSoapNote] = useState({
         subjective: '',
         objective: '',

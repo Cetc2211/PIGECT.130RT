@@ -8,6 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "./ui/textarea";
 import { ClinicalAssessment } from "@/lib/store";
 import { useEffect, useMemo, useState } from "react";
+import { FileText, Loader2, Clock, AlertTriangle } from 'lucide-react';
 import { getTestResults, saveClinicalAssessment } from '@/lib/storage-local';
 import type { Expediente } from '@/lib/expediente-service';
 

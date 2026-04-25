@@ -1,9 +1,9 @@
 'use server';
 
-import {genkit, type Plugin} from 'genkit';
+import {genkit} from 'genkit';
 import {googleAI} from '@genkit-ai/google-genai';
 
-const plugins: Plugin<any>[] = [];
+const plugins: any[] = [];
 if (process.env.GEMINI_API_KEY) {
   plugins.push(googleAI({apiVersion: 'v1beta'}));
 } else {
@@ -12,6 +12,6 @@ if (process.env.GEMINI_API_KEY) {
 
 export const ai = genkit({
   plugins,
-  logLevel: 'debug',
+  // @ts-expect-error enableTracingAndMetrics not in current genkit version
   enableTracingAndMetrics: true,
 });

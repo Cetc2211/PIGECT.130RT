@@ -232,7 +232,7 @@ export default function LiraForm({ studentId, grupoId, matricula, sessionId, onC
         );
     }
 
-    const renderSection = (title: string, items: typeof indicadores.academicos, colorClass: string) => (
+    const renderSection = (title: string, items: { id: string; text: string; critical?: boolean }[], colorClass: string) => (
         <div className="mb-6">
             <h3 className={`p-2 font-semibold text-white rounded-t ${colorClass}`}>{title}</h3>
             <div className="border border-t-0 rounded-b p-2 space-y-2">

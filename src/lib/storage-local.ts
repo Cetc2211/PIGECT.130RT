@@ -10,7 +10,7 @@ const CLINICAL_ASSESSMENTS_KEY = 'pigec_clinical_assessments';
 const FUNCTIONAL_ANALYSES_KEY = 'pigec_functional_analyses';
 const TREATMENT_PLANS_KEY = 'pigec_treatment_plans';
 
-type StoredExpediente = {
+export type StoredExpediente = {
   id?: string;
   studentId?: string;
   [key: string]: unknown;

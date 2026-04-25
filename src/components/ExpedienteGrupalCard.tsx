@@ -16,7 +16,9 @@ import {
   TrendingDown,
   Target,
   Brain,
-  Heart
+  Heart,
+  BarChart3,
+  BookOpen
 } from 'lucide-react';
 import { getTestResults } from '@/lib/storage/repos/resultados-pruebas';
 
@@ -199,7 +201,7 @@ export function ExpedienteGrupalCard({
             grupoNombre: '',
             fechaCompletado: new Date(r.submittedAt),
             respuestas: r.respuestas as Record<string, any>,
-            sessionId: r.sessionId,
+            sessionId: r.sessionId ?? undefined,
           };
         });
 
@@ -212,12 +214,12 @@ export function ExpedienteGrupalCard({
       const porEstudiante: Record<string, EstudianteResultado> = {};
       
       resultados.forEach(r => {
-        const expedienteId = r.expedienteId || r.matricula;
-        if (!porEstudiante[expedienteId]) {
+        const expedienteId = r.expedienteId || r.matricula || '';
+        if (expedienteId && !porEstudiante[expedienteId]) {
           porEstudiante[expedienteId] = {
             expedienteId,
             nombreCompleto: r.nombreCompleto || 'Sin nombre',
-            matricula: r.matricula,
+            matricula: r.matricula || '',
             tests: []
           };
         }
@@ -225,7 +227,7 @@ export function ExpedienteGrupalCard({
         // Agregar resultado con interpretación
         if (r.puntaje !== null && r.puntaje !== undefined && r.testId) {
           const interpretacion = interpretarTest(r.testId, r.puntaje);
-          porEstudiante[expedienteId].tests.push({
+          if (expedienteId) porEstudiante[expedienteId].tests.push({
             testId: r.testId,
             testName: r.testName || r.testId,
             puntaje: r.puntaje,
