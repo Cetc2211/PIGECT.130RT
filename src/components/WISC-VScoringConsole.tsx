@@ -1384,7 +1384,8 @@ function SubtestApplicationConsole({ subtestName, subtestId, renderType, stimulu
                                     if (subtestId === 'Ca') {
                                         const rawScore = Math.max(0, correctAnswers - incorrectAnswers);
                                         // Usamos la tabla de baremos existente para obtener el puntaje escalar
-                                        // @ts-expect-error getScaledScoreFromTable defined in parent scope; this subcomponent references it
+                                        // TODO(Paso 5): Importar getScaledScoreFromTable desde wisc-norms y pasar como prop al subcomponente.
+                                        // @ts-expect-error getPaso 5: getScaledScoreFromTable definido en scope del padre; el subcomponente lo referencia sin importar
                                         const scaledScore = (typeof getScaledScoreFromTable !== 'undefined' ? getScaledScoreFromTable : getScaledScore)('Ca', rawScore);
                                         
                                         console.log(`Guardando Cancelación: Bruto=${rawScore}, Escalar=${scaledScore}`);
@@ -1394,7 +1395,8 @@ function SubtestApplicationConsole({ subtestName, subtestId, renderType, stimulu
                                         setScore(1, scaledScore);
                                         
                                         // También podríamos actualizar rawScores si fuera necesario para el cálculo de perfil
-                                        // @ts-expect-error setRawScores defined in parent WISCScoringConsole component
+                                        // TODO(Paso 5): Pasar setRawScores como prop al subcomponente CancellationSubtest.
+                                        // @ts-expect-error Paso 5: setRawScores definido en scope del componente padre WISCScoringConsole
                                         (typeof setRawScores !== 'undefined') && setRawScores((prev: any) => ({...prev, 'Ca': rawScore}));
                                     }
                                 }}
@@ -1619,7 +1621,8 @@ export default function WISCScoringConsole({ studentId, studentAge }: WISCScorin
 
     // Cargar Caso de Prueba (Instrucción 6)
     const handleLoadTestCase = (caseKey: string = "esteban") => {
-        // @ts-ignore
+        // TODO(Paso 5): Tipar TEST_CASES como Record<string, TestCaseData> para eliminar @ts-ignore.
+        // @ts-ignore Paso 5: TEST_CASES no tiene índice de tipo string
         const selectedCase = TEST_CASES[caseKey];
         if (!selectedCase) return;
 
