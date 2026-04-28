@@ -11,5 +11,4 @@ export const ai = genkit({
   plugins: [googleAI({apiVersion: 'v1beta'})],
 });
 
-// Re-export z from genkit for AI flows that need Zod schemas compatible with genkit internals
-export { z } from 'genkit';
+

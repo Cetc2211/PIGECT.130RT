@@ -7,7 +7,8 @@
  * - WiscReportOutput: El tipo de salida para el flujo.
  */
 
-import {ai, z} from '@/ai/genkit';
+import {ai} from '@/ai/genkit';
+import {z} from '@/ai/genkit-zod';
 
 export const WiscReportInputSchema = z.object({
     studentName: z.string().describe('Nombre del evaluado.'),
