@@ -8,7 +8,7 @@
  */
 
 import {ai} from '@/ai/genkit';
-import {z} from 'zod';
+import {z} from '@/ai/genkit-zod';
 
 export const WiscReportInputSchema = z.object({
     studentName: z.string().describe('Nombre del evaluado.'),

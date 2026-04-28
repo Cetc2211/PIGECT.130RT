@@ -36,8 +36,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { addDoc, collection, doc, setDoc } from 'firebase/firestore';
-import { db, auth } from '@/lib/firebase';
+import { getLocalSpecialistProfile } from '@/lib/local-access';
 
 
 export default function AttendancePage() {
@@ -171,14 +170,11 @@ export default function AttendancePage() {
 
       setIsReporting(true);
       try {
-          const user = auth.currentUser;
-          
-          // Si no hay usuario autenticado (ej: desarrollo local sin auth), usamos un placeholder para evitar crash
-          const teacherId = user?.uid || 'guest_teacher';
-          const teacherEmail = user?.email || 'profesor@escuela.edu';
+          const profile = getLocalSpecialistProfile();
+          const teacherEmail = profile?.email || 'profesor@local';
 
           const absentStudents = activeGroup.students
-              .filter(s => attendanceForDate[s.id] === false) // Solo los explícitamente marcados como falta
+              .filter(s => attendanceForDate[s.id] === false) 
               .map(s => ({ 
                   id: s.id, 
                   name: s.name,
@@ -195,21 +191,25 @@ export default function AttendancePage() {
               groupId: activeGroup.id,
               groupName: activeGroup.subject || activeGroup.groupName || 'Grupo sin nombre',
               date: format(date, 'dd/MM/yyyy'),
-              teacherId: teacherId,
+              teacherId: 'local-user',
               teacherEmail: teacherEmail,
               absentStudents: absentStudents,
               whatsappLink: activeGroup.whatsappLink || '',
               timestamp: new Date().toISOString()
           };
 
-          // Usamos un ID compuesto por grupo y fecha para, si se vuelve a enviar, actualizar el existente en lugar de duplicar.
-          // formattedDate tiene el formato yyyy-MM-dd que es seguro para IDs y ordenable.
+          // Save absence report locally
+          const ABSENCES_KEY = 'pigec_absence_reports';
+          const existing = (() => { try { return JSON.parse(localStorage.getItem(ABSENCES_KEY) || '[]'); } catch { return []; } })();
           const reportId = `${activeGroup.id}_${formattedDate}`;
-          await setDoc(doc(db, 'absences', reportId), reportData);
+          const idx = existing.findIndex((r: any) => r.reportId === reportId);
+          if (idx >= 0) existing[idx] = { ...reportData, reportId }; 
+          else existing.push({ ...reportData, reportId });
+          localStorage.setItem(ABSENCES_KEY, JSON.stringify(existing));
 
           toast({
-              title: 'Reporte Enviado',
-              description: `Se notificaron ${absentStudents.length} inasistencias a la administración. (Registro actualizado)`,
+              title: 'Reporte Guardado Localmente',
+              description: `Se registraron ${absentStudents.length} inasistencias. (Modo local — sin sincronización a la nube)`,
           });
 
       } catch (e) {

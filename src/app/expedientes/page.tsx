@@ -56,6 +56,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getOfficialGroupStructures, saveExpedienteLocal, saveImportedWhatsAppEvaluation } from '@/lib/storage-local';
+import type { StoredExpediente } from '@/lib/storage-local';
 import { decodeEvaluationPayload } from '@/lib/data-utils';
 import {
   getExpedientes as getExpedientesService,
@@ -244,7 +245,7 @@ export default function ExpedientesPage() {
         notas: [],
       };
 
-      saveExpedienteLocal(nuevoExpediente);
+      saveExpedienteLocal({ ...nuevoExpediente } as StoredExpediente);
 
       toast({
         title: 'Expediente guardado localmente',

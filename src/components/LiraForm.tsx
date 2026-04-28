@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CheckCircle2, Save, RotateCcw, AlertTriangle } from "lucide-react";
-import { db } from '@/lib/firebase';
+import { saveTestResultDirect } from '@/lib/storage/repos/resultados-pruebas';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "./ui/input";
@@ -139,21 +139,17 @@ export default function LiraForm({ studentId, grupoId, matricula, sessionId, onC
         if (studentId) {
             try {
                 setIsSaving(true);
-                saveTestResultLocal({
+                const profile = (() => { try { return JSON.parse(localStorage.getItem('pigec_local_specialist_profile') || 'null'); } catch { return null; } })();
+                saveTestResultDirect({
+                    id: `lira-${Date.now()}`,
                     studentId,
-                    grupoId: grupoId || null,
-                    matricula: matricula || null,
                     sessionId: sessionId || null,
                     testType: 'LIRA',
-                    date: new Date().toISOString(),
                     submittedAt: new Date().toISOString(),
-                    score: total,
-                    interpretation: interpretation.level,
-                    level: interpretation.level,
-                    action: interpretation.action,
-                    hasEmergency,
-                    sections: { academicos: sA, conductuales: sB, fisicos: sC, contextuales: sD, emergencia: sE },
-                    checked,
+                    respuestas: { checked, sections: { academicos: sA, conductuales: sB, fisicos: sC, contextuales: sD, emergencia: sE }, total, interpretation: interpretation.level, hasEmergency } as Record<string, unknown>,
+                    fechaAplicacion: new Date().toISOString(),
+                    aplicadoPor: profile?.email || 'local',
+                    modo: 'presencial',
                 });
             } catch (error) {
                 console.error('Error guardando:', error);
@@ -236,7 +232,7 @@ export default function LiraForm({ studentId, grupoId, matricula, sessionId, onC
         );
     }
 
-    const renderSection = (title: string, items: typeof indicadores.academicos, colorClass: string) => (
+    const renderSection = (title: string, items: { id: string; text: string; critical?: boolean }[], colorClass: string) => (
         <div className="mb-6">
             <h3 className={`p-2 font-semibold text-white rounded-t ${colorClass}`}>{title}</h3>
             <div className="border border-t-0 rounded-b p-2 space-y-2">

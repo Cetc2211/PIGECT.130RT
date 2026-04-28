@@ -57,5 +57,20 @@ worklog.md
 *.tar.gz
 *.patch
 
+# Python
+.venv/
+venv/
+__pycache__/
+
+# Legacy tools
+bfg.jar
+
+# Lock files (project uses npm)
+bun.lock
+yarn.lock
+
 # Legacy backup/copy directory (duplicate of root project)
 PIGEC-130/
+
+# Download directory (generated artifacts)
+download/

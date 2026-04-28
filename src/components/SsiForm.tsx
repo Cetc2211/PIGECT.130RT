@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Progress } from "@/components/ui/progress";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { CheckCircle2, Save, RotateCcw, AlertTriangle } from "lucide-react";
-import { db } from '@/lib/firebase';
+import { saveTestResultDirect } from '@/lib/storage/repos/resultados-pruebas';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 // ============================================
@@ -292,18 +292,17 @@ export default function SsiForm({ studentId, sessionId, onComplete }: SsiFormPro
         if (studentId) {
             try {
                 setIsSaving(true);
-                saveTestResultLocal({
+                const profile = (() => { try { return JSON.parse(localStorage.getItem('pigec_local_specialist_profile') || 'null'); } catch { return null; } })();
+                saveTestResultDirect({
+                    id: `ssi-${Date.now()}`,
                     studentId,
                     sessionId: sessionId || null,
                     testType: 'SSI-Beck',
-                    date: new Date().toISOString(),
                     submittedAt: new Date().toISOString(),
-                    score: calculatedResult.total,
-                    interpretation: calculatedResult.interpretation.level,
-                    flags: calculatedResult.flags,
-                    urgency: calculatedResult.interpretation.urgency,
-                    skipDetails: calculatedResult.skipDetails,
-                    responses,
+                    respuestas: { responses, score: calculatedResult.total, interpretation: calculatedResult.interpretation.level, flags: calculatedResult.flags, urgency: calculatedResult.interpretation.urgency, skipDetails: calculatedResult.skipDetails } as Record<string, unknown>,
+                    fechaAplicacion: new Date().toISOString(),
+                    aplicadoPor: profile?.email || 'local',
+                    modo: 'presencial',
                 });
             } catch (error) {
                 console.error('Error guardando:', error);
