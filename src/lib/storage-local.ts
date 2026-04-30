@@ -2,7 +2,7 @@ import type { OfficialGroup } from '@/lib/placeholder-data';
 import type { WhatsAppBridgePayload } from '@/lib/data-utils';
 
 const EXPEDIENTES_KEY = 'pigec_expedientes';
-const OFFICIAL_GROUPS_KEY = 'pigec_official_groups';
+export const OFFICIAL_GROUPS_KEY = 'pigec_official_groups';
 const WHATSAPP_IMPORTS_KEY = 'pigec_whatsapp_imports';
 const EVALUATION_SESSIONS_KEY = 'pigec_evaluation_sessions';
 const TEST_RESULTS_KEY = 'pigec_test_results';
@@ -89,6 +89,22 @@ export function saveExpediente(expediente: StoredExpediente): void {
 
 export function saveExpedienteLocal(expediente: StoredExpediente): void {
   saveExpediente(expediente);
+}
+
+export function migrateOfficialGroups(): OfficialGroup[] {
+  const groups = getOfficialGroupStructures();
+  let changed = false;
+  const migrated = groups.map(g => {
+    if (!g.studentIds) {
+      changed = true;
+      return { ...g, studentIds: [] };
+    }
+    return g;
+  });
+  if (changed) {
+    localStorage.setItem(OFFICIAL_GROUPS_KEY, JSON.stringify(migrated));
+  }
+  return migrated;
 }
 
 export function saveOfficialGroupStructure(group: OfficialGroup): void {

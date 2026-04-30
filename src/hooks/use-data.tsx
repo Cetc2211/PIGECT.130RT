@@ -6,7 +6,7 @@ import type { Student, Group, OfficialGroup, PartialId, StudentObservation, Spec
 import { getSimpleRiskLevel } from '@/lib/risk-analysis';
 import { DEFAULT_MODEL, normalizeModel } from '@/lib/ai-models';
 import { useToast } from '@/hooks/use-toast';
-import { getOfficialGroupStructures, saveOfficialGroupStructure } from '@/lib/storage-local';
+import { getOfficialGroupStructures, saveOfficialGroupStructure, migrateOfficialGroups, OFFICIAL_GROUPS_KEY } from '@/lib/storage-local';
 import { hasLocalAccessProfile, getLocalSpecialistProfile } from '@/lib/local-access';
 
 // TYPE DEFINITIONS
@@ -134,8 +134,10 @@ interface DataContextType {
     createOfficialGroup: (name: string, tutorEmail?: string) => Promise<string>;
     updateOfficialGroupTutor: (officialGroupId: string, tutorEmail: string) => Promise<void>;
     deleteOfficialGroup: (id: string) => Promise<void>;
+    renameOfficialGroup: (id: string, newName: string) => Promise<void>;
     addStudentsToOfficialGroup: (officialGroupId: string, students: Student[]) => Promise<void>;
     getOfficialGroupStudents: (officialGroupId: string) => Promise<Student[]>;
+    removeStudentFromOfficialGroup: (officialGroupId: string, studentId: string) => Promise<void>;
 
     // Justifications & Announcements
     announcements: Announcement[];
@@ -271,9 +273,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         hydrateData();
     }, []);
 
-    // Load official groups from local storage
+    // Load official groups from local storage (with migration)
     useEffect(() => {
-        const localOfficialGroups = getOfficialGroupStructures();
+        const localOfficialGroups = migrateOfficialGroups();
         if (localOfficialGroups.length > 0) {
             setOfficialGroups(localOfficialGroups);
         }
@@ -605,6 +607,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             name,
             createdAt: new Date().toISOString(),
             tutorEmail: tutorEmail || '',
+            studentIds: [],
         };
 
         saveOfficialGroupStructure(groupPayload);
@@ -628,23 +631,65 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, []);
 
     const updateOfficialGroupTutor = useCallback(async (officialGroupId: string, tutorEmail: string) => {
-        // Update local official groups list
-        setOfficialGroups(prev => prev.map(g => g.id === officialGroupId ? { ...g, tutorEmail } : g));
-        saveOfficialGroupStructure({ id: officialGroupId, name: '', createdAt: '', tutorEmail });
+        setOfficialGroups(prev => prev.map(g => {
+            if (g.id !== officialGroupId) return g;
+            const updated = { ...g, tutorEmail };
+            saveOfficialGroupStructure(updated);
+            return updated;
+        }));
     }, []);
 
     const deleteOfficialGroup = useCallback(async (id: string) => {
+        // Remove from localStorage
+        const current = getOfficialGroupStructures();
+        const filtered = current.filter(g => g.id !== id);
+        localStorage.setItem(OFFICIAL_GROUPS_KEY, JSON.stringify(filtered));
+
+        // Remove from React state
         setOfficialGroups(prev => prev.filter(g => g.id !== id));
+
+        // Clear cache
+        localStorage.removeItem('cached_official_groups');
     }, []);
 
-    const addStudentsToOfficialGroup = useCallback(async (_officialGroupId: string, students: Student[]) => {
-        // In local mode, just add students to local state
+    const renameOfficialGroup = useCallback(async (id: string, newName: string) => {
+        setOfficialGroups(prev => prev.map(g => {
+            if (g.id !== id) return g;
+            const updated = { ...g, name: newName };
+            saveOfficialGroupStructure(updated);
+            return updated;
+        }));
+    }, []);
+
+    const addStudentsToOfficialGroup = useCallback(async (officialGroupId: string, students: Student[]) => {
+        // Add students to allStudents pool
         await setAllStudents(prev => [...prev, ...students.filter(s => !prev.some(ps => ps.id === s.id))]);
+
+        // Link students to the official group
+        const newStudentIds = students.map(s => s.id);
+        setOfficialGroups(prev => prev.map(g => {
+            if (g.id !== officialGroupId) return g;
+            const existingIds = g.studentIds || [];
+            const mergedIds = [...new Set([...existingIds, ...newStudentIds])];
+            const updated = { ...g, studentIds: mergedIds };
+            saveOfficialGroupStructure(updated);
+            return updated;
+        }));
     }, [setAllStudents]);
 
-    const getOfficialGroupStudents = useCallback(async (_officialGroupId: string) => {
-        // In local mode, return empty — students are managed via groups
-        return [];
+    const getOfficialGroupStudents = useCallback(async (officialGroupId: string) => {
+        const group = officialGroups.find(g => g.id === officialGroupId);
+        if (!group || !group.studentIds) return [];
+        return allStudents.filter(s => (group.studentIds || []).includes(s.id));
+    }, [officialGroups, allStudents]);
+
+    const removeStudentFromOfficialGroup = useCallback(async (officialGroupId: string, studentId: string) => {
+        setOfficialGroups(prev => prev.map(g => {
+            if (g.id !== officialGroupId) return g;
+            const updated = { ...g, studentIds: (g.studentIds || []).filter(id => id !== studentId) };
+            saveOfficialGroupStructure(updated);
+            return updated;
+        }));
     }, []);
 
     // Announcements (LOCAL via localStorage)
@@ -898,7 +943,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setSettings, setActiveGroupId, setActivePartialId,
             setGrades, setAttendance, setParticipations, setActivities, setActivityRecords, setRecoveryGrades, setMeritGrades, setStudentFeedback, setGroupAnalysis,
             addStudentsToGroup, removeStudentFromGroup, updateGroup, updateStudent, updateGroupCriteria, deleteGroup, addStudentObservation, updateStudentObservation, takeAttendanceForDate, deleteAttendanceDate, resetAllData, importAllData, addSpecialNote, updateSpecialNote, deleteSpecialNote,
-            createOfficialGroup, updateOfficialGroupTutor, deleteOfficialGroup, addStudentsToOfficialGroup, getOfficialGroupStudents, createAnnouncement, deleteAnnouncement, createJustification, deleteJustification,
+            createOfficialGroup, updateOfficialGroupTutor, deleteOfficialGroup, renameOfficialGroup, addStudentsToOfficialGroup, getOfficialGroupStudents, removeStudentFromOfficialGroup, createAnnouncement, deleteAnnouncement, createJustification, deleteJustification,
             calculateFinalGrade, calculateDetailedFinalGrade, getStudentRiskLevel, fetchPartialData, triggerPedagogicalCheck, syncPublicData, forceCloudSync, uploadLocalToCloud, syncStatus: 'synced', syncProgress: null,
         }}>
             {children}
@@ -974,8 +1019,10 @@ export const useData = (): DataContextType => {
                 createOfficialGroup: async () => '',
                 updateOfficialGroupTutor: noopAsync,
                 deleteOfficialGroup: noopAsync,
+                renameOfficialGroup: noopAsync,
                 addStudentsToOfficialGroup: noopAsync,
                 getOfficialGroupStudents: async () => [],
+                removeStudentFromOfficialGroup: noopAsync,
 
                 createAnnouncement: noopAsync,
                 createJustification: noopAsync,
