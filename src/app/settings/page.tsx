@@ -18,8 +18,7 @@ import { useToast } from '@/hooks/use-toast';
 import { ThemeSwitcher, themes } from '@/components/theme-switcher';
 import { Separator } from '@/components/ui/separator';
 import { useData } from '@/hooks/use-data';
-import type { SyncProgress } from '@/hooks/use-data';
-import { Upload, Download, RotateCcw, Loader2, KeyRound, PlusCircle, Edit, Trash2, CalendarIcon, Image as ImageIcon, Phone, Cloud, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { Upload, Download, RotateCcw, Loader2, KeyRound, PlusCircle, Edit, Trash2, CalendarIcon, Image as ImageIcon, Phone } from 'lucide-react';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -50,7 +49,7 @@ type ExportData = {
 };
 
 export default function SettingsPage() {
-    const { settings, isLoading, groups, allStudents, allObservations, specialNotes, fetchPartialData, setSettings, resetAllData, importAllData, addSpecialNote, updateSpecialNote, deleteSpecialNote, syncPublicData, forceCloudSync, uploadLocalToCloud, syncStatus, syncProgress } = useData();
+    const { settings, isLoading, groups, allStudents, allObservations, specialNotes, fetchPartialData, setSettings, resetAllData, importAllData, addSpecialNote, updateSpecialNote, deleteSpecialNote } = useData();
     const [localSettings, setLocalSettings] = useState(settings);
     const [logoPreview, setLogoPreview] = useState<string | null>(null);
     const [signaturePreview, setSignaturePreview] = useState<string | null>(null);
@@ -64,7 +63,6 @@ export default function SettingsPage() {
     const [importFile, setImportFile] = useState<File | null>(null);
     const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
     const [isTestingKey, setIsTestingKey] = useState(false);
-    const [isSyncing, setIsSyncing] = useState(false);
     const [userGeminiApiKey, setUserGeminiApiKey] = useState('');
     const [hasUserGeminiApiKey, setHasUserGeminiApiKey] = useState(false);
 
@@ -272,26 +270,6 @@ export default function SettingsPage() {
             addSpecialNote(noteData);
         }
     };
-    
-    const handleSyncData = async () => {
-        setIsSyncing(true);
-        try {
-            await syncPublicData();
-            toast({
-                title: 'Datos Sincronizados',
-                description: 'La información del tutor se ha actualizado en la nube.',
-            });
-        } catch (error) {
-            console.error(error);
-            toast({
-                title: 'Error de Sincronización',
-                description: 'No se pudieron actualizar los datos públicos.',
-                variant: 'destructive'
-            });
-        } finally {
-            setIsSyncing(false);
-        }
-    };
 
     if (isLoading) {
         return (
@@ -306,12 +284,6 @@ export default function SettingsPage() {
         <div>
             <div className="flex items-center gap-2 mb-2">
                 <h1 className="text-3xl font-bold">Ajustes</h1>
-                <div className="flex items-center gap-1">
-                    <Cloud className={`h-4 w-4 ${syncStatus === 'synced' ? 'text-green-500' : 'text-red-500'}`} />
-                    <span className="text-xs text-muted-foreground">
-                        {syncStatus === 'synced' ? 'Sincronizado' : syncStatus === 'syncing' ? 'Sincronizando...' : 'Pendiente'}
-                    </span>
-                </div>
             </div>
             <p className="text-muted-foreground">
             Personaliza la aplicación, gestiona tu horario y administra tus datos.
@@ -635,188 +607,6 @@ export default function SettingsPage() {
                     Asegúrate de que el archivo de importación haya sido generado por esta aplicación.
                 </p>
             </CardFooter>
-        </Card>
-
-        <Card className="border-blue-500">
-            <CardHeader>
-                <CardTitle className="text-blue-600 flex items-center gap-2">
-                    <Cloud className="h-5 w-5" />
-                    Sincronización con la Nube
-                </CardTitle>
-                <CardDescription>
-                    Gestiona cómo se sincronizan tus datos entre dispositivos. Usa estas opciones cuando haya inconsistencias.
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                    {/* UPLOAD TO CLOUD */}
-                    <div className="p-4 border rounded-lg bg-green-50 border-green-200">
-                        <h4 className="font-medium text-green-800 mb-2">📤 Subir a la Nube</h4>
-                        <p className="text-sm text-green-700 mb-3">
-                            Si tus datos correctos están en ESTE dispositivo, usa esta opción para subirlos a Firebase.
-                        </p>
-                        <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                                <Button className="w-full bg-green-600 hover:bg-green-700">
-                                    <Cloud className="mr-2 h-4 w-4" />
-                                    Subir Datos Locales a la Nube
-                                </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle>¿Subir datos a la nube?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        Esto subirá TODOS los datos de este dispositivo a Firebase, sobrescribiendo cualquier dato existente en la nube.
-                                    </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                    <AlertDialogAction onClick={uploadLocalToCloud}>
-                                        Sí, subir mis datos
-                                    </AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
-                    </div>
-
-                    {/* DOWNLOAD FROM CLOUD */}
-                    <div className="p-4 border rounded-lg bg-blue-50 border-blue-200">
-                        <h4 className="font-medium text-blue-800 mb-2">📥 Descargar de la Nube</h4>
-                        <p className="text-sm text-blue-700 mb-3">
-                            Si los datos correctos están en la NUBE (otro dispositivo), usa esta opción para descargarlos.
-                        </p>
-                        <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                                <Button variant="outline" className="w-full border-blue-500 text-blue-600 hover:bg-blue-100">
-                                    <RotateCcw className="mr-2 h-4 w-4" />
-                                    Descargar Datos de la Nube
-                                </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle>¿Descargar datos de la nube?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        Esto descargará TODOS los datos de Firebase, reemplazando los datos locales.
-                                    </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                    <AlertDialogAction onClick={forceCloudSync}>
-                                        Sí, descargar datos
-                                    </AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
-                    </div>
-                </div>
-
-                {/* SYNC STATUS */}
-                <div className="p-3 bg-muted rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                            <div className={`h-3 w-3 rounded-full ${
-                                syncStatus === 'synced' ? 'bg-green-500' :
-                                syncStatus === 'syncing' ? 'bg-blue-500 animate-pulse' :
-                                'bg-yellow-500'
-                            }`} />
-                            <span className="text-sm font-medium">
-                                Estado: {syncStatus === 'synced' ? 'Sincronizado' : syncStatus === 'syncing' ? 'Sincronizando...' : 'Pendiente'}
-                            </span>
-                        </div>
-                        <span className="text-xs text-muted-foreground">
-                            {groups.length} grupos, {allStudents.length} estudiantes
-                        </span>
-                    </div>
-
-                    {/* Detailed Progress */}
-                    {syncProgress && syncProgress.step !== 'idle' && (
-                        <div className="mt-3 pt-3 border-t border-border">
-                            {/* Progress bar */}
-                            <div className="flex items-center gap-2 mb-2">
-                                <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                                    <div
-                                        className={`h-full transition-all duration-300 ${
-                                            syncProgress.step === 'error' ? 'bg-red-500' :
-                                            syncProgress.step === 'completed' ? 'bg-green-500' :
-                                            'bg-blue-500'
-                                        }`}
-                                        style={{ width: `${(syncProgress.currentStep / syncProgress.totalSteps) * 100}%` }}
-                                    />
-                                </div>
-                                <span className="text-xs text-muted-foreground">
-                                    {syncProgress.currentStep}/{syncProgress.totalSteps}
-                                </span>
-                            </div>
-
-                            {/* Current task */}
-                            <div className="flex items-center gap-2 mb-3">
-                                {syncProgress.step === 'uploading' && <Loader2 className="h-4 w-4 animate-spin text-blue-500" />}
-                                {syncProgress.step === 'completed' && <CheckCircle className="h-4 w-4 text-green-500" />}
-                                {syncProgress.step === 'error' && <AlertCircle className="h-4 w-4 text-red-500" />}
-                                <span className="text-sm">{syncProgress.currentTask}</span>
-                            </div>
-
-                            {/* Results list */}
-                            {syncProgress.results.length > 0 && (
-                                <div className="space-y-1">
-                                    {syncProgress.results.map((result, index) => (
-                                        <div key={index} className="flex items-center gap-2 text-xs">
-                                            {result.success ? (
-                                                <CheckCircle className="h-3 w-3 text-green-500" />
-                                            ) : (
-                                                <XCircle className="h-3 w-3 text-red-500" />
-                                            )}
-                                            <span className={result.success ? 'text-green-700' : 'text-red-700'}>
-                                                {result.key === 'app_groups' ? 'Grupos' :
-                                                 result.key === 'app_students' ? 'Estudiantes' :
-                                                 result.key === 'app_observations' ? 'Observaciones' :
-                                                 result.key === 'app_specialNotes' ? 'Notas especiales' :
-                                                 result.key === 'app_partialsData' ? 'Datos parciales' :
-                                                 'Configuración'}
-                                                : {result.count} items ({result.size})
-                                            </span>
-                                            {result.error && (
-                                                <span className="text-red-500 ml-1">- {result.error}</span>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            {/* Duration */}
-                            {syncProgress.step === 'completed' && (
-                                <div className="text-xs text-muted-foreground mt-2">
-                                    Completado en {((Date.now() - syncProgress.startTime) / 1000).toFixed(1)}s
-                                </div>
-                            )}
-
-                            {/* Error message */}
-                            {syncProgress.error && (
-                                <div className="text-sm text-red-600 mt-2 p-2 bg-red-50 rounded">
-                                    Error: {syncProgress.error}
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
-            </CardContent>
-        </Card>
-
-        <Card>
-            <CardHeader>
-                <CardTitle>Sincronización de Datos Públicos</CardTitle>
-                <CardDescription>
-                    Sincroniza manualmente la información visible para los tutores (calificaciones y reportes). Úsalo si los datos no aparecen en la vista de tutores.
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
-                <div className="flex gap-2">
-                    <Button onClick={handleSyncData} disabled={isSyncing}>
-                        {isSyncing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}
-                        Sincronizar Todo
-                    </Button>
-                </div>
-            </CardContent>
         </Card>
 
         <Card>

@@ -75,6 +75,10 @@ export type OfficialGroup = {
   name: string;
   createdAt: string;
   tutorEmail?: string; // Correo del docente asignado como Tutor
+  studentIds: string[];  // IDs of students in this group
+  semester?: string;      // e.g. "2026-1"
+  career?: string;        // e.g. "TSPA"
+  turn?: string;          // "Matutino" | "Vespertino"
 };
 
 export type Group = {
@@ -191,12 +195,11 @@ export type AllPartialsData = {
 };
 
 
-export type CalculatedRisk = {
-    level: 'low' | 'medium' | 'high';
-    reason: string;
-};
+/** @deprecated Import CalculatedRisk from '@/types/risk' instead */
+export type { CalculatedRisk } from '@/types/risk';
+export type { RiskLevel } from '@/types/risk';
 
-export type StudentWithRisk = Student & { calculatedRisk: CalculatedRisk };
+export type StudentWithRisk = Student & { calculatedRisk: import('@/types/risk').CalculatedRisk };
 
 export type CriteriaDetail = {
     name: string;

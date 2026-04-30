@@ -26,6 +26,7 @@ import {
   getExpedientes as getExpedientesLocal,
   saveExpediente as saveExpedienteLocal,
 } from './storage-local';
+import type { StoredExpediente } from './storage-local';
 
 // ─── TIPOS ────────────────────────────────────────────────────────────────────
 
@@ -386,7 +387,7 @@ export function crearExpediente(data: {
 
   hydrateExpedientesFromLocalStorage();
   expedientesDinamicos.push(nuevo);
-  saveExpedienteLocal(nuevo);
+  saveExpedienteLocal({ ...nuevo } as StoredExpediente);
   return nuevo;
 }
 
@@ -407,7 +408,7 @@ export function actualizarNivelExpediente(id: string, nuevoNivel: NivelMTSS): Ex
       estado: nuevoNivel === 'nivel_3' ? 'en_seguimiento' : expedientesDinamicos[idx].estado,
       fechaActualizacion: new Date().toISOString(),
     };
-    saveExpedienteLocal(expedientesDinamicos[idx]);
+    saveExpedienteLocal({ ...expedientesDinamicos[idx] } as StoredExpediente);
     return expedientesDinamicos[idx];
   }
 
@@ -437,7 +438,7 @@ export function agregarEvaluacion(
     fechaActualizacion: new Date().toISOString(),
   };
 
-  saveExpedienteLocal(expedientesDinamicos[idx]);
+  saveExpedienteLocal({ ...expedientesDinamicos[idx] } as StoredExpediente);
 
   return expedientesDinamicos[idx];
 }
@@ -464,7 +465,7 @@ export function agregarNota(
     fechaActualizacion: new Date().toISOString(),
   };
 
-  saveExpedienteLocal(expedientesDinamicos[idx]);
+  saveExpedienteLocal({ ...expedientesDinamicos[idx] } as StoredExpediente);
 
   return expedientesDinamicos[idx];
 }
@@ -483,7 +484,7 @@ export function cambiarEstadoExpediente(id: string, nuevoEstado: EstadoExpedient
     fechaActualizacion: new Date().toISOString(),
   };
 
-  saveExpedienteLocal(expedientesDinamicos[idx]);
+  saveExpedienteLocal({ ...expedientesDinamicos[idx] } as StoredExpediente);
 
   return expedientesDinamicos[idx];
 }

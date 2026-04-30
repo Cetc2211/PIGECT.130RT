@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Progress } from "@/components/ui/progress";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { CheckCircle2, Save, RotateCcw, AlertTriangle } from "lucide-react";
-import { db } from '@/lib/firebase';
+import { saveTestResultDirect } from '@/lib/storage/repos/resultados-pruebas';
+import type { TestResult } from '@/lib/storage';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 
@@ -138,17 +139,17 @@ export default function PlutchikForm({ studentId, sessionId, onComplete }: Plutc
         if (studentId) {
             try {
                 setIsSaving(true);
-                saveTestResultLocal({
+                const profile = (() => { try { return JSON.parse(localStorage.getItem('pigec_local_specialist_profile') || 'null'); } catch { return null; } })();
+                saveTestResultDirect({
+                    id: `plutchik-${Date.now()}`,
                     studentId,
                     sessionId: sessionId || null,
                     testType: 'Plutchik',
-                    date: new Date().toISOString(),
                     submittedAt: new Date().toISOString(),
-                    score: calculatedResult.total,
-                    interpretation: calculatedResult.interpretation.level,
-                    criticalItems: calculatedResult.criticalItems,
-                    urgency: calculatedResult.interpretation.urgency,
-                    responses,
+                    respuestas: responses as Record<string, unknown>,
+                    fechaAplicacion: new Date().toISOString(),
+                    aplicadoPor: profile?.email || 'local',
+                    modo: 'presencial',
                 });
             } catch (error) {
                 console.error('Error guardando:', error);
