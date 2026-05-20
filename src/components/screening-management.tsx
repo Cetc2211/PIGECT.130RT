@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { useSession } from '@/context/SessionContext';
+import { useData } from '@/hooks/use-data';
 import { Checkbox } from './ui/checkbox';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
@@ -30,12 +31,7 @@ import {
     type MatriculaRegistro,
     type ListaMatriculasGrupo
 } from '@/lib/matricula-service';
-import { 
-    obtenerGrupos,
-    obtenerEstudiantesGrupo,
-    type Grupo,
-    type EstudianteGrupo
-} from '@/lib/grupos-service';
+// grupos-service ya no se usa directamente — los grupos oficiales vienen de useData()
 
 // ============================================
 // CATÁLOGO DE PRUEBAS COMPLETO
@@ -77,7 +73,7 @@ const allScreenings = [
 const categories = ['Ficha', 'Académicas', 'Socioemocionales', 'Riesgo Suicida', 'Conductas Riesgo', 'Evaluación Clínica'];
 
 // ============================================
-// DATOS DE GRUPOS - Cargados dinámicamente desde Firestore/Academic Tracker
+// DATOS DE GRUPOS - Cargados desde useData() hook (OfficialGroups)
 // ============================================
 
 // ============================================
@@ -101,12 +97,24 @@ interface EvaluationSession {
 // ============================================
 export default function ScreeningManagement() {
     const { role } = useSession();
+    const { officialGroups, allStudents, getOfficialGroupStudents } = useData();
     const [activeTab, setActiveTab] = useState('grupo');
     
-    // Estado de grupos (cargados desde Firestore)
-    const [grupos, setGrupos] = useState<Grupo[]>([]);
-    const [loadingGrupos, setLoadingGrupos] = useState(true);
-    const [errorGrupos, setErrorGrupos] = useState<string | null>(null);
+    // Mapear OfficialGroups → formato local que espera el componente
+    const grupos = useMemo(() => officialGroups.map(og => ({
+        id: og.id,
+        nombre: og.name,
+        semestre: 1,
+        carrera: 'Tecnólogo',
+        turno: 'Matutino' as const,
+        periodo: '2026-1',
+        totalEstudiantes: (og.studentIds || []).length,
+        tutorEmail: og.tutorEmail,
+        activo: true,
+        fechaCreacion: new Date(og.createdAt),
+    })), [officialGroups]);
+    const loadingGrupos = false;
+    const errorGrupos = null;
     
     // Estado de selección de grupos
     const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
@@ -130,41 +138,7 @@ export default function ScreeningManagement() {
     const [isCreating, setIsCreating] = useState(false);
     const [createSessionError, setCreateSessionError] = useState<string | null>(null);
 
-    // ============================================
-    // CARGA DE GRUPOS DESDE FIRESTORE
-    // ============================================
-    useEffect(() => {
-        async function cargarGrupos() {
-            setLoadingGrupos(true);
-            setErrorGrupos(null);
-            
-            try {
-                const resultado = await obtenerGrupos();
-                
-                if (resultado.success) {
-                    setGrupos(resultado.grupos);
-                } else {
-                    setErrorGrupos(resultado.error || 'Error al cargar grupos');
-                    // Si hay error, usar grupos de respaldo para demo
-                    setGrupos([
-                        { id: 'G001', nombre: 'Grupo 1A - Semestre 1', semestre: 1, carrera: 'Tecnólogo', turno: 'Matutino', periodo: '2026-1', totalEstudiantes: 35, activo: true },
-                        { id: 'G002', nombre: 'Grupo 2B - Semestre 2', semestre: 2, carrera: 'Tecnólogo', turno: 'Matutino', periodo: '2026-1', totalEstudiantes: 32, activo: true },
-                        { id: 'G003', nombre: 'Grupo 3A - Semestre 3', semestre: 3, carrera: 'Tecnólogo', turno: 'Matutino', periodo: '2026-1', totalEstudiantes: 30, activo: true },
-                        { id: 'G004', nombre: 'Grupo 4B - Semestre 4', semestre: 4, carrera: 'Tecnólogo', turno: 'Matutino', periodo: '2026-1', totalEstudiantes: 28, activo: true },
-                        { id: 'G005', nombre: 'Grupo 5A - Semestre 5', semestre: 5, carrera: 'Tecnólogo', turno: 'Matutino', periodo: '2026-1', totalEstudiantes: 25, activo: true },
-                        { id: 'G006', nombre: 'Grupo 6B - Semestre 6', semestre: 6, carrera: 'Tecnólogo', turno: 'Matutino', periodo: '2026-1', totalEstudiantes: 22, activo: true },
-                    ]);
-                }
-            } catch (error) {
-                console.error('Error cargando grupos:', error);
-                setErrorGrupos('Error de conexión al cargar grupos');
-            } finally {
-                setLoadingGrupos(false);
-            }
-        }
-        
-        cargarGrupos();
-    }, []);
+    // Los grupos oficiales se cargan automáticamente desde useData() → officialGroups
 
     // Filtrar pruebas por rol
     const availableScreenings = (role as string) === 'Admin'
@@ -209,27 +183,22 @@ export default function ScreeningManagement() {
             const grupo = grupos.find(g => g.id === grupoId);
             if (!grupo) continue;
 
-            // Obtener estudiantes reales del grupo desde Firestore
-            const resultadoEstudiantes = await obtenerEstudiantesGrupo(grupoId);
+            // Obtener estudiantes reales del grupo desde useData()
+            const estudiantesGrupo = await getOfficialGroupStudents(grupoId);
             
             let estudiantesParaMatricular: { id: string; nombre: string; telefono?: string; email?: string }[];
             
-            if (resultadoEstudiantes.success && resultadoEstudiantes.estudiantes.length > 0) {
-                // Usar estudiantes reales
-                estudiantesParaMatricular = resultadoEstudiantes.estudiantes.map(est => ({
+            if (estudiantesGrupo.length > 0) {
+                // Usar estudiantes reales del grupo oficial
+                estudiantesParaMatricular = estudiantesGrupo.map(est => ({
                     id: est.id,
-                    nombre: est.nombre,
-                    telefono: est.telefono,
+                    nombre: est.name,
+                    telefono: est.phone,
                     email: est.email
                 }));
             } else {
-                // Crear lista simulada de estudiantes para demo
-                estudiantesParaMatricular = Array.from({ length: grupo.totalEstudiantes }, (_, i) => ({
-                    id: `est_${grupoId}_${i}`,
-                    nombre: `Estudiante ${i + 1} - ${grupo.nombre}`,
-                    telefono: undefined,
-                    email: undefined
-                }));
+                // Sin estudiantes — informar al usuario
+                continue;
             }
 
             const resultado = await generarMatriculasGrupo(
@@ -442,8 +411,8 @@ export default function ScreeningManagement() {
                                 Seleccionar Grupo(s)
                             </CardTitle>
                             <CardDescription>
-                                Seleccione los grupos que participarán en la evaluación. 
-                                Los datos se obtienen de Academic Tracker.
+                                Seleccione los grupos oficiales creados en Administración. 
+                                Si no ve grupos, créelos primero en Panel de Administración.
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -471,33 +440,13 @@ export default function ScreeningManagement() {
                                 </Select>
                             </div>
 
-                            {/* Estado de carga */}
-                            {loadingGrupos && (
-                                <div className="flex items-center justify-center py-12">
-                                    <RefreshCw className="h-8 w-8 animate-spin text-blue-600 mr-3" />
-                                    <span className="text-gray-600">Cargando grupos desde Academic Tracker...</span>
-                                </div>
-                            )}
-
-                            {/* Error de carga */}
-                            {errorGrupos && !loadingGrupos && (
-                                <Alert className="mb-4 border-amber-200 bg-amber-50">
-                                    <AlertTriangle className="h-4 w-4 text-amber-600" />
-                                    <AlertTitle>Modo Demostración</AlertTitle>
-                                    <AlertDescription className="text-amber-700">
-                                        {errorGrupos}. Se muestran grupos de ejemplo.
-                                    </AlertDescription>
-                                </Alert>
-                            )}
-
                             {/* Lista de grupos */}
-                            {!loadingGrupos && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                     {grupos.length === 0 ? (
                                         <div className="col-span-full text-center py-8 text-gray-500">
                                             <Users className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                                            <p>No se encontraron grupos activos.</p>
-                                            <p className="text-sm mt-2">Verifique que existan grupos en Academic Tracker.</p>
+                                            <p>No se encontraron grupos oficiales.</p>
+                                            <p className="text-sm mt-2">Cree grupos en <strong>Administración → Gestión de Grupos</strong>.</p>
                                         </div>
                                     ) : (
                                         grupos.map(group => (
@@ -529,7 +478,6 @@ export default function ScreeningManagement() {
                                         ))
                                     )}
                                 </div>
-                            )}
 
                             {/* Resumen y botón continuar */}
                             <div className="mt-8 p-4 bg-green-50 rounded-lg border border-green-200">
