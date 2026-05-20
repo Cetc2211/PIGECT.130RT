@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Progress } from "@/components/ui/progress";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { CheckCircle2, Save, RotateCcw, AlertTriangle } from "lucide-react";
-import { db } from '@/lib/firebase';
+import { saveTestResultLocal } from '@/lib/storage-local';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 // ============================================

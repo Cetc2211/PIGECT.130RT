@@ -33,8 +33,9 @@ const bhsItems = [
     { id: 20, text: "Las cosas no van a mejorar para mí.", inverted: false }
 ];
 
-// Ítems que suman punto cuando la respuesta es TRUE (no invertidos)
-const TRUE_SCORES = [2, 4, 7, 9, 11, 12, 14, 16, 17, 18, 20];
+// Ítems que suman punto cuando la respuesta es TRUE (no invertidos — indican desesperanza)
+// Estándar BHS: items no invertidos = 2,4,7,9,10,13,15,17,18,20
+const TRUE_SCORES = [2, 4, 7, 9, 10, 13, 15, 17, 18, 20];
 
 // Interpretación BHS
 function interpretBHS(score: number): { level: string; color: string; description: string } {

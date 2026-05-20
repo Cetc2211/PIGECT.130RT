@@ -150,11 +150,15 @@ export default function HadsForm({ studentId, grupoId, matricula, sessionId, onC
         let anxiety = 0;
         let depression = 0;
 
+        // Encontrar todos los items invertidos para aplicar inversión de puntuación
+        const invertedItems = hadsItems.filter(item => item.inverted).map(item => item.id);
+        
         Object.entries(responses).forEach(([key, value]) => {
+            const score = invertedItems.includes(key) ? (3 - value) : value;
             if (key.startsWith('a')) {
-                anxiety += value;
+                anxiety += score;
             } else {
-                depression += value;
+                depression += score;
             }
         });
 
