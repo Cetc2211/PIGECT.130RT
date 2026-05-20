@@ -1,6 +1,6 @@
 'use client';
 
-import { useParams, redirect } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useSession } from '@/context/SessionContext';
 import React, { useEffect, useState } from 'react';
 import { getStudentById, getEducationalAssessmentByStudentId, Student } from '@/lib/store';
@@ -17,6 +17,7 @@ export default function EducationalFilePage() {
     const params = useParams();
     const studentId = params.id as string;
     const { role } = useSession();
+    const router = useRouter();
 
     const [isLoaded, setIsLoaded] = useState(false);
     const [isReferralOpen, setIsReferralOpen] = useState(false);
@@ -28,7 +29,6 @@ export default function EducationalFilePage() {
         }
     }, [studentId]);
 
-
     useEffect(() => {
         if (role && role !== 'loading') {
             setIsLoaded(true);
@@ -36,12 +36,11 @@ export default function EducationalFilePage() {
     }, [role]);
 
     // GUARDIA DE RUTA INVERSA: Si eres Clínico, ve a tu vista completa
-    if (isLoaded) {
-        if (role === 'Clinico') {
-            redirect(`/clinica/expediente/${studentId}`);
-            return null; 
+    useEffect(() => {
+        if (isLoaded && role === 'Clinico') {
+            router.replace(`/clinica/expediente/${studentId}`);
         }
-    }
+    }, [isLoaded, role, studentId, router]);
     
     if (role === 'loading' || !isLoaded || !student) {
         return <div className="p-8 text-center text-xl">Verificando Permisos Educativos...</div>;

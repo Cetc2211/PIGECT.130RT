@@ -1,7 +1,6 @@
 'use client';
 
-import { useParams, redirect } from 'next/navigation';
-import { useAuthState } from 'react-firebase-hooks/auth';
+import { useParams, useRouter } from 'next/navigation';
 import { useSession } from '@/context/SessionContext';
 import React, { useEffect, useState } from 'react';
 
@@ -27,8 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import StudentIdentificationCard from '@/components/StudentIdentificationCard';
-import { auth, db } from '@/lib/firebase';
-import { doc, getDoc, getDocs, collection, limit, query, where } from 'firebase/firestore';
+// Firebase eliminado — modo 100% local ( stub en @/lib/firebase si se necesita )
 
 function expedienteToStudent(exp: ExpedienteType): Student {
     return {
@@ -47,16 +45,17 @@ export default function ClinicalFilePage() {
     const params = useParams();
     const studentId = params.id as string;
     const { role } = useSession();
-    const [user, authLoading] = useAuthState(auth);
+    const router = useRouter();
     const [student, setStudent] = useState<Student | undefined>(undefined);
     const [expedienteDinamico, setExpedienteDinamico] = useState<ExpedienteType | undefined>(undefined);
     const [loadingRemoteExpediente, setLoadingRemoteExpediente] = useState(false);
 
     useEffect(() => {
-        if (!studentId || authLoading) {
+        if (!studentId) {
             return;
         }
 
+        // Modo 100% local: buscar en store demo, luego en expediente dinámico
         const demoStudent = getStudentById(studentId);
         if (demoStudent) {
             setStudent(demoStudent);
@@ -73,134 +72,25 @@ export default function ClinicalFilePage() {
             return;
         }
 
-        if (!db || !user) {
-            setStudent(undefined);
-            setExpedienteDinamico(undefined);
-            setLoadingRemoteExpediente(false);
-            return;
-        }
-
-        let isCancelled = false;
-
-        const cargarExpedienteRemoto = async () => {
-            setLoadingRemoteExpediente(true);
-
-            try {
-                const coleccionesCandidatas = ['expedientes', 'alumnos', 'students'];
-
-                for (const nombreColeccion of coleccionesCandidatas) {
-                    const docRef = doc(db, nombreColeccion, studentId);
-                    const docSnap = await getDoc(docRef);
-
-                    if (docSnap.exists()) {
-                        const data = docSnap.data() as Partial<ExpedienteType> & Record<string, any>;
-                        const exp: ExpedienteType = {
-                            id: data.id || docSnap.id,
-                            studentId: data.studentId || docSnap.id,
-                            studentName: data.studentName || data.nombreCompleto || data.name || 'Sin nombre',
-                            groupName: data.groupName || data.grupoNombre || data.group || 'Sin grupo',
-                            semester: Number(data.semester || data.semestre || 1),
-                            nivel: (data.nivel as any) || 'nivel_1',
-                            estado: (data.estado as any) || 'abierto',
-                            origen: (data.origen as any) || 'registro_manual',
-                            fechaCreacion: data.fechaCreacion || new Date().toISOString(),
-                            fechaActualizacion: data.fechaActualizacion || new Date().toISOString(),
-                            creadoPor: data.creadoPor || 'sistema',
-                            academicData: {
-                                gpa: Number(data.academicData?.gpa || data.gpa || 0),
-                                absences: Number(data.academicData?.absences || data.absences || 0),
-                            },
-                            fichaIdentificacion: data.fichaIdentificacion,
-                            ansiedadScore: typeof data.ansiedadScore === 'number' ? data.ansiedadScore : undefined,
-                            suicideRiskLevel: data.suicideRiskLevel,
-                            irc: typeof data.irc === 'number' ? data.irc : undefined,
-                            nivelRiesgo: data.nivelRiesgo,
-                            evaluaciones: Array.isArray(data.evaluaciones) ? data.evaluaciones : [],
-                            notas: Array.isArray(data.notas) ? data.notas : [],
-                        };
-
-                        if (!isCancelled) {
-                            setExpedienteDinamico(exp);
-                            setStudent(expedienteToStudent(exp));
-                        }
-                        return;
-                    }
-
-                    const q = query(collection(db, nombreColeccion), where('studentId', '==', studentId), limit(1));
-                    const snap = await getDocs(q);
-                    const primerDoc = snap.docs[0];
-                    if (primerDoc) {
-                        const data = primerDoc.data() as Partial<ExpedienteType> & Record<string, any>;
-                        const exp: ExpedienteType = {
-                            id: data.id || primerDoc.id,
-                            studentId: data.studentId || primerDoc.id,
-                            studentName: data.studentName || data.nombreCompleto || data.name || 'Sin nombre',
-                            groupName: data.groupName || data.grupoNombre || data.group || 'Sin grupo',
-                            semester: Number(data.semester || data.semestre || 1),
-                            nivel: (data.nivel as any) || 'nivel_1',
-                            estado: (data.estado as any) || 'abierto',
-                            origen: (data.origen as any) || 'registro_manual',
-                            fechaCreacion: data.fechaCreacion || new Date().toISOString(),
-                            fechaActualizacion: data.fechaActualizacion || new Date().toISOString(),
-                            creadoPor: data.creadoPor || 'sistema',
-                            academicData: {
-                                gpa: Number(data.academicData?.gpa || data.gpa || 0),
-                                absences: Number(data.academicData?.absences || data.absences || 0),
-                            },
-                            fichaIdentificacion: data.fichaIdentificacion,
-                            ansiedadScore: typeof data.ansiedadScore === 'number' ? data.ansiedadScore : undefined,
-                            suicideRiskLevel: data.suicideRiskLevel,
-                            irc: typeof data.irc === 'number' ? data.irc : undefined,
-                            nivelRiesgo: data.nivelRiesgo,
-                            evaluaciones: Array.isArray(data.evaluaciones) ? data.evaluaciones : [],
-                            notas: Array.isArray(data.notas) ? data.notas : [],
-                        };
-
-                        if (!isCancelled) {
-                            setExpedienteDinamico(exp);
-                            setStudent(expedienteToStudent(exp));
-                        }
-                        return;
-                    }
-                }
-
-                if (!isCancelled) {
-                    setStudent(undefined);
-                    setExpedienteDinamico(undefined);
-                }
-            } catch (error) {
-                console.error('Error cargando expediente remoto:', error);
-                if (!isCancelled) {
-                    setStudent(undefined);
-                    setExpedienteDinamico(undefined);
-                }
-            } finally {
-                if (!isCancelled) {
-                    setLoadingRemoteExpediente(false);
-                }
-            }
-        };
-
-        cargarExpedienteRemoto();
-
-        return () => {
-            isCancelled = true;
-        };
-    }, [authLoading, studentId, user]);
+        // No encontrado en ninguna fuente local
+        setStudent(undefined);
+        setExpedienteDinamico(undefined);
+        setLoadingRemoteExpediente(false);
+    }, [studentId]);
 
     useEffect(() => {
         if (role && role !== 'loading' && role !== 'Clinico') {
             console.log(`ACCESO DENEGADO: Rol '${role}' intentó acceder a ruta clínica. Redirigiendo.`);
-            redirect(`/educativa/estudiante/${studentId}`);
+            router.replace(`/educativa/estudiante/${studentId}`);
         }
-    }, [role, studentId]);
+    }, [role, studentId, router]);
     
-    if (role === 'loading' || authLoading || loadingRemoteExpediente || (!student && !expedienteDinamico)) {
+    if (role === 'loading' || loadingRemoteExpediente || (!student && !expedienteDinamico)) {
         return (
             <div className="flex h-screen w-full items-center justify-center p-8">
                 <div className="flex items-center gap-2 text-xl text-gray-600">
                     <Loader className="animate-spin" />
-                    {role === 'loading' || authLoading ? 'Verificando Permisos de Seguridad...' : 'Cargando datos del estudiante...'}
+                    {role === 'loading' ? 'Verificando Permisos de Seguridad...' : 'Cargando datos del estudiante...'}
                 </div>
             </div>
         );
