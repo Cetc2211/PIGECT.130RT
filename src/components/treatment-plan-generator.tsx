@@ -135,7 +135,7 @@ export default function TreatmentPlanGenerator({
 
             // Generate plan with AI (including PDF file references)
             setLoadingStage('Generando plan de tratamiento con IA...');
-            const generatedPlan = await generateClinicalPlan(clinicalContext, referenceText, {
+            const generatedPlan = await generateClinicalPlan(clinicalContext + '\n\n' + referenceText, {
                 pdfFiles: pdfFiles.length > 0 ? pdfFiles : undefined,
             });
             setPlan(generatedPlan);

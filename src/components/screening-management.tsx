@@ -167,7 +167,7 @@ export default function ScreeningManagement() {
     }, []);
 
     // Filtrar pruebas por rol
-    const availableScreenings = role === 'Admin'
+    const availableScreenings = (role as string) === 'Admin'
         ? allScreenings
         : allScreenings.filter(s => s.roles.includes(role as string));
     const categorizedTests = categories.map(category => ({

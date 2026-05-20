@@ -14,8 +14,7 @@ import { OfficialGroup } from '@/lib/placeholder-data';
 import { AlertCircle, BookOpen, BrainCircuit, CalendarX, GraduationCap, Users, FileText, Download, PlusCircle, CheckCircle2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from "@/hooks/use-toast";
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth } from '@/lib/firebase';
+import { getLocalSpecialistProfile } from '@/lib/local-access';
 
 export default function TutorDashboard() {
   const [availableGroups, setAvailableGroups] = useState<OfficialGroup[]>([]);
@@ -23,14 +22,16 @@ export default function TutorDashboard() {
   const [students, setStudents] = useState<TutorStudentView[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const { toast } = useToast();
-  const [user, authLoading] = useAuthState(auth);
+  const [authLoading] = useState(false);
+  const profile = getLocalSpecialistProfile();
+  const userEmail = profile?.email || '';
 
   useEffect(() => {
     async function fetchGroups() {
-      if (!user?.email) return;
+      if (!userEmail) return;
       
       try {
-        const groups = await TutorService.getTutorGroupsForEmail(user.email);
+        const groups = await TutorService.getTutorGroupsForEmail(userEmail);
         setAvailableGroups(groups);
         
         if (groups.length > 0) {
@@ -44,10 +45,8 @@ export default function TutorDashboard() {
       }
     }
     
-    if (!authLoading) {
-        fetchGroups();
-    }
-  }, [user, authLoading]);
+    fetchGroups();
+  }, [userEmail]);
 
   useEffect(() => {
       async function fetchStudents() {
@@ -84,7 +83,7 @@ export default function TutorDashboard() {
       }
   };
 
-  if (authLoading || (dataLoading && availableGroups.length === 0)) {
+  if (dataLoading && availableGroups.length === 0) {
     return <div className="p-8 flex justify-center items-center min-h-[50vh] flex-col gap-2">
         <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
         <span className="text-muted-foreground">Cargando Módulo de Tutoría...</span>
@@ -99,7 +98,7 @@ export default function TutorDashboard() {
         </div>
         <h2 className="text-2xl font-bold">Sin asignación de tutoría</h2>
         <p className="text-muted-foreground max-w-md">
-            No tienes grupos oficiales asignados a tu cuenta ({user?.email}). 
+            No tienes grupos oficiales asignados a tu cuenta ({userEmail}). 
             <br/>Si eres tutor, solicita al administrador que vincule tu correo al grupo correspondiente.
         </p>
       </div>

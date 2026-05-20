@@ -312,7 +312,7 @@ export default function EvaluacionPage() {
                 createdAt: new Date().toISOString(),
                 tokenId,
                 sessionId: session?.id,
-                mode: isIndividual ? 'individual' : 'group',
+                mode: isIndividual ? 'individual' as const : 'group' as const,
                 student: {
                     id: expedienteId || displayStudentId || null,
                     name: displayStudentName,

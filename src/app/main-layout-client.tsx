@@ -62,7 +62,7 @@ import {
 import Image from 'next/image';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useState } from 'react';
-import { TEMPORARY_ACCESS_EMAIL } from '@/lib/auth-bypass';
+import { LOCAL_ADMIN_EMAIL } from '@/lib/local-access';
 
 const navItems = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -92,7 +92,7 @@ const defaultSettings = {
 export default function MainLayoutClient({ children }: { children: React.ReactNode }) {
   const { toast } = useToast();
   // 100% local mode — no Firebase auth
-  const user = { uid: 'local-user', email: TEMPORARY_ACCESS_EMAIL, photoURL: '' };
+  const user = { uid: 'local-user', email: LOCAL_ADMIN_EMAIL, photoURL: '' };
   const isAuthLoading = false;
   const { isAdmin, loading: loadingAdmin } = useAdmin();
   const { officialGroups, settings, syncStatus, activeGroup, activePartialId, isLoading: isDataLoading, unreadAnnouncementsCount } = useData();
@@ -100,7 +100,7 @@ export default function MainLayoutClient({ children }: { children: React.ReactNo
   const router = useRouter();
   const [isTrackingManager, setIsTrackingManager] = useState(false);
   const [isTutor, setIsTutor] = useState(false);
-  const effectiveEmail = user?.email || TEMPORARY_ACCESS_EMAIL;
+  const effectiveEmail = user?.email || LOCAL_ADMIN_EMAIL;
   const effectivePhoto = settings.teacherPhoto || user?.photoURL || '';
 
   useEffect(() => {

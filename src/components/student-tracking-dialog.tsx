@@ -11,8 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, subDays, isAfter, startOfWeek, startOfMonth, parseISO, isSameDay } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { collection, query, where, getDocs, addDoc, orderBy, Timestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase'; // Ensure this matches your firebase export
+import { getLocalSpecialistProfile } from '@/lib/local-access';
 import { useData } from '@/hooks/use-data';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Phone, Mail, MessageCircle, User, Calendar, ClipboardList, AlertTriangle, TrendingUp, History, CheckCircle2, MapPin, FileText, FileDown } from 'lucide-react';
@@ -137,56 +136,19 @@ export function StudentTrackingDialog({
     const loadStudentData = async () => {
       setLoading(true);
       try {
-        // 1. Fetch Absences (Need to filter manually on client or complex query)
-        // Since 'absentStudents' is an array of objects in 'absences' collection, we can't easily query
-        // unless we save 'studentIds' array in the record. 
-        // Assumption: The system might not have 'studentIds' array. I'll read all absences (cached?) or try to query specific dates?
-        // BETTER: Query ALL absences (might be heavy eventually) -> Filter client side. 
-        // OPTIMIZATION: Created a composite index or just fetch last 30 days? 
-        // FOR NOW: Fetch all absences collection and filter. (Warning: scalability)
-        
-        const absencesRef = collection(db, 'absences');
-        // Ideally we should have: where('studentIds', 'array-contains', studentId)
-        // But based on previous file read, it's an array of objects: absentStudents: {id, name...}[]
-        // We CANNOT query array of objects easily. 
-        // Fallback: Fetch all documents (limited by date maybe?) 
-        // Let's assume for this version we fetch all. In prod, update schema to include `studentIds` array.
-        
-        // REMOVED orderBy from Firestore query to avoid "Index Required" error or type mismatch issues.
-        const qAbsences = query(absencesRef);
-        const absencesSnap = await getDocs(qAbsences);
-        
-        const studentAbsences: AbsenceRecord[] = [];
-        absencesSnap.forEach(doc => {
-          const data = doc.data();
-          
-          // Safety check: ensure absentStudents is an array
-          if (!Array.isArray(data.absentStudents)) return;
+        // 1. Fetch Absences from localStorage
+        const ABSENCES_KEY = 'pigec_absence_reports';
+        const allAbsences = (() => { try { return JSON.parse(localStorage.getItem(ABSENCES_KEY) || '[]'); } catch { return []; } })();
 
-          // Check if student is in the array
-          const isAbsent = data.absentStudents.some((s: any) => s && s.id === studentId);
-          
-          if (isAbsent) {
-            // Robust timestamp handling
-            let ts = data.timestamp;
-            // Setup a safe fallback date string if timestamp is missing or weird
-            let safeDateStr = new Date().toISOString(); 
-            
-            if (typeof ts === 'string') {
-                safeDateStr = ts;
-            } else if (ts && typeof ts.toDate === 'function') {
-                safeDateStr = ts.toDate().toISOString();
-            }
-
-            studentAbsences.push({
-              id: doc.id,
-              date: data.date || '',
-              groupName: data.groupName || 'Sin grupo',
-              teacherEmail: data.teacherEmail || '',
-              timestamp: safeDateStr
-            });
-          }
-        });
+        const studentAbsences: AbsenceRecord[] = allAbsences.filter((r: any) =>
+          Array.isArray(r.absentStudents) && r.absentStudents.some((s: any) => s && s.id === studentId)
+        ).map((r: any) => ({
+          id: r.reportId || r.id || '',
+          date: r.date || '',
+          groupName: r.groupName || 'Sin grupo',
+          teacherEmail: r.teacherEmail || '',
+          timestamp: r.timestamp || new Date().toISOString()
+        }));
         
         // Sort client-side by timestamp descending
         studentAbsences.sort((a, b) => {
@@ -217,21 +179,16 @@ export function StudentTrackingDialog({
           riskLevel: risk as any
         });
 
-        // 3. Fetch Logs
-        const logsRef = collection(db, 'tracking_logs');
-        // REMOVED orderBy from Firestore query to avoid "Index Required" error. Sorting client-side.
-        const qLogs = query(logsRef, where('studentId', '==', studentId));
-        const logsSnap = await getDocs(qLogs);
-        
-        const fetchedLogs: TrackingLog[] = [];
-        logsSnap.forEach(doc => {
-          fetchedLogs.push({ id: doc.id, ...doc.data() } as TrackingLog);
-        });
-        
+        // 3. Fetch Logs from localStorage
+        const TRACKING_LOGS_KEY = `pigec_tracking_logs_${studentId}`;
+        const fetchedLogs: TrackingLog[] = (() => {
+          try { return JSON.parse(localStorage.getItem(TRACKING_LOGS_KEY) || '[]'); } catch { return []; }
+        })();
+
         // Sort in memory by date descending
         fetchedLogs.sort((a, b) => {
-            const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date);
-            const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date);
+            const dateA = typeof a.date === 'string' ? new Date(a.date) : new Date();
+            const dateB = typeof b.date === 'string' ? new Date(b.date) : new Date();
             return dateB.getTime() - dateA.getTime();
         });
 
@@ -435,16 +392,20 @@ export function StudentTrackingDialog({
     try {
       const logData = {
         studentId,
-        date: Timestamp.now(),
+        date: new Date().toISOString(),
         actionType: newLogType,
         result: newLogResult,
         notes: newLogNotes,
-        author: 'Responsable Seguimiento' // Ideally get from Auth context
+        author: 'Responsable Seguimiento'
       };
+
+      // Save to localStorage
+      const TRACKING_LOGS_KEY = `pigec_tracking_logs_${studentId}`;
+      const existing = (() => { try { return JSON.parse(localStorage.getItem(TRACKING_LOGS_KEY) || '[]'); } catch { return []; } })();
+      existing.unshift({ id: `log-${Date.now()}`, ...logData });
+      localStorage.setItem(TRACKING_LOGS_KEY, JSON.stringify(existing));
       
-      const docRef = await addDoc(collection(db, 'tracking_logs'), logData);
-      
-      setLogs(prev => [{ id: docRef.id, ...logData } as TrackingLog, ...prev]);
+      setLogs(existing);
       setNewLogType('');
       setNewLogResult('');
       setNewLogNotes('');
@@ -669,7 +630,7 @@ export function StudentTrackingDialog({
                                             {ACTION_LABELS[log.actionType as keyof typeof ACTION_LABELS] || log.actionType}
                                         </Badge>
                                         <span className="text-xs text-muted-foreground">
-                                            {log.date?.seconds ? format(new Date(log.date.seconds * 1000), "PPP p", { locale: es }) : 'Fecha desconocida'}
+                                            {log.date && typeof log.date === 'string' ? format(new Date(log.date), "PPP p", { locale: es }) : 'Fecha desconocida'}
                                         </span>
                                     </div>
                                     <div className="mb-2">

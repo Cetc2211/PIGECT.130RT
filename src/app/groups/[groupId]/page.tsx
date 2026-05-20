@@ -59,7 +59,7 @@ import { useData } from '@/hooks/use-data';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { analyzeStudentRisk } from '@/lib/risk-analysis';
+import { analyzeStudentRiskFull } from '@/lib/risk-analysis';
 
 
 export default function GroupDetailsPage() {
@@ -187,23 +187,20 @@ export default function GroupDetailsPage() {
     if (!activeGroup) return {};
     const riskMap: {[studentId: string]: CalculatedRisk} = {};
     
-    // Usamos analyzeStudentRisk para obtener el nivel de riesgo real y progresivo
+    // Usamos analyzeStudentRiskFull para obtener el nivel de riesgo real y progresivo
     activeGroup.students.forEach(s => {
       // Calculamos el total de clases registradas para pasar como parámetro
       const totalClassesRegistered = Object.keys(partialData.attendance || {}).length;
       
-      const analysis = analyzeStudentRisk(
-          s, 
+      const analysis = analyzeStudentRiskFull({
+          student: s, 
           partialData, 
-          activeGroup.criteria || [], 
-          totalClassesRegistered,
-          allObservations[s.id]?.map(o => o.details) || []
-      );
+          criteria: activeGroup.criteria || [], 
+          totalClasses: totalClassesRegistered,
+          observations: allObservations[s.id]?.map(o => o.details) || []
+      });
 
-      riskMap[s.id] = {
-          level: analysis.riskLevel,
-          reason: analysis.riskFactors.join(', ')
-      };
+      riskMap[s.id] = analysis;
     });
     return riskMap;
   }, [activeGroup, partialData, allObservations]); 
@@ -235,17 +232,17 @@ export default function GroupDetailsPage() {
               // Si no hay datos y no hay clases registradas, ignoramos
               if (!hasData && pTotalClasses === 0) return null;
 
-              const pAnalysis = analyzeStudentRisk(
+              const pAnalysis = analyzeStudentRiskFull({
                   student,
-                  pData,
-                  activeGroup.criteria || [],
-                  pTotalClasses,
-                  [] // No necesitamos observaciones para el historial numérico
-              );
+                  partialData: pData,
+                  criteria: activeGroup.criteria || [],
+                  totalClasses: pTotalClasses,
+                  observations: []
+              });
               
               // Si el análisis devuelve 100 pero no hay datos reales (beneficio de la duda), 
               // y estamos en modo histórico, tal vez deberíamos filtrarlo si realmente está vacío?
-              // Pero analyzeStudentRisk ya maneja "beneficio de la duda".
+              // Pero analyzeStudentRiskFull ya maneja "beneficio de la duda".
               // Si hasData es false pero pTotalClasses > 0 (solo asistencia vacía?), pAnalysis dará 100.
               // Vamos a confiar en hasData para filtrar parciales "no iniciados".
               if (!hasData && pAnalysis.currentGrade === 100) return null;
@@ -263,19 +260,19 @@ export default function GroupDetailsPage() {
           // Calcular promedio semestral si está integrado
           let semesterGradeOverride: number | undefined = undefined;
           if (activeGroup.isSemesterIntegrated && history.length > 0) {
-              const sum = history.reduce((acc, h) => acc + h.grade, 0);
+              const sum = history.reduce((acc, h) => acc + (h.grade ?? 0), 0);
               semesterGradeOverride = sum / history.length;
           }
 
           // Usamos la función avanzada directamente para la tabla detallada
-          const analysis = analyzeStudentRisk(
+          const analysis = analyzeStudentRiskFull({
               student, 
               partialData, 
-              activeGroup.criteria || [], 
-              totalClassesRegistered,
-              allObservations[student.id]?.map(o => o.details) || [],
+              criteria: activeGroup.criteria || [], 
+              totalClasses: totalClassesRegistered,
+              observations: allObservations[student.id]?.map(o => o.details) || [],
               semesterGradeOverride
-          );
+          });
           
           return {
               studentId: student.id,
@@ -834,7 +831,7 @@ export default function GroupDetailsPage() {
                     <TableHeader>
                     <TableRow>
                         {isSelectionMode && (
-                            <TableCell padding="checkbox">
+                            <TableCell className="w-10">
                                 <Checkbox
                                     checked={activeGroup.students.length > 0 && numSelected === activeGroup.students.length ? true : (numSelected > 0 ? 'indeterminate' : false)}
                                     onCheckedChange={(checked) => handleSelectAll(checked)}
@@ -870,7 +867,7 @@ export default function GroupDetailsPage() {
                         return (
                             <TableRow key={student.id} data-state={selectedStudents.includes(student.id) && "selected"}>
                             {isSelectionMode && (
-                                <TableCell padding="checkbox">
+                                <TableCell className="w-10">
                                     <Checkbox
                                         checked={selectedStudents.includes(student.id)}
                                         onCheckedChange={() => handleSelectStudent(student.id)}

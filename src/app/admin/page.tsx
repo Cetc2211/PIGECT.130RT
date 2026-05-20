@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { UserPlus, RefreshCw, UserCog, Bug, Copy, Trash2 } from 'lucide-react';
+import { UserPlus, RefreshCw, UserCog, Bug, Copy, Trash2, Users, ChevronRight } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import Link from 'next/link';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -291,6 +291,27 @@ export default function AdminPage() {
                 Gestión de expedientes, usuarios y roles del sistema MTSS.
             </p>
 
+            {/* === NAVEGACIÓN A SECCIONES === */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+                <Link href="/admin/official-groups" className="group">
+                    <Card className="h-full transition-all hover:shadow-lg hover:border-primary/50 cursor-pointer">
+                        <CardContent className="flex items-center justify-between p-6">
+                            <div className="flex items-center gap-4">
+                                <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-primary/10 text-primary">
+                                    <Users className="h-6 w-6" />
+                                </div>
+                                <div>
+                                    <p className="font-semibold text-lg">Gestión de Grupos</p>
+                                    <p className="text-sm text-muted-foreground">Crear grupos oficiales, agregar estudiantes y gestionar evaluaciones masivas</p>
+                                </div>
+                            </div>
+                            <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                        </CardContent>
+                    </Card>
+                </Link>
+            </div>
+
+            {/* === SECCIONES DE ADMINISTRACIÓN === */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
                 <AddNewStudentForm />
                 <RoleManagementCard />

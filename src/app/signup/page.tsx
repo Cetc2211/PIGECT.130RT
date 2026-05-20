@@ -1,9 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useCreateUserWithEmailAndPassword } from 'react-firebase-hooks/auth';
-import { auth } from '@/lib/firebase';
-import { TEMPORARY_AUTH_BYPASS } from '@/lib/auth-bypass';
+import { saveLocalSpecialistProfile, hasLocalAccessProfile } from '@/lib/local-access';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -24,31 +22,20 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 
 const SignupFormSchema = z.object({
+  fullName: z.string().min(2, { message: 'El nombre debe tener al menos 2 caracteres.' }),
   email: z.string().email({ message: 'Por favor, ingresa un email válido.' }),
-  password: z.string()
-    .min(8, { message: 'La contraseña debe tener al menos 8 caracteres.' })
-    .regex(/[A-Z]/, { message: 'La contraseña debe contener al menos una letra mayúscula.' })
-    .regex(/[a-z]/, { message: 'La contraseña debe contener al menos una letra minúscula.' })
-    .regex(/[0-9]/, { message: 'La contraseña debe contener al menos un número.' })
-    .regex(/[^A-Za-z0-9]/, { message: 'La contraseña debe contener al menos un carácter especial.' }),
-  confirmPassword: z.string(),
-  accessCode: z.string().min(1, { message: 'El código de institución es requerido.' })
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Las contraseñas no coinciden.",
-  path: ["confirmPassword"],
-}).refine((data) => data.accessCode === "ACTRACKER_TEACHER_2025", {
-  message: "Código de institución inválido. Solicítalo a la administración.",
-  path: ["accessCode"],
+  apiKey: z.string().optional(),
+}).refine((data) => data.email && data.fullName, {
+  message: "Nombre y correo son requeridos.",
 });
 
 
 export default function SignupPage() {
-  const [createUserWithEmailAndPassword, user, loading, error] = useCreateUserWithEmailAndPassword(auth);
   const { toast } = useToast();
   const router = useRouter();
 
   useEffect(() => {
-    if (TEMPORARY_AUTH_BYPASS) {
+    if (hasLocalAccessProfile()) {
       router.replace('/dashboard');
     }
   }, [router]);
@@ -56,59 +43,40 @@ export default function SignupPage() {
   const form = useForm<z.infer<typeof SignupFormSchema>>({
     resolver: zodResolver(SignupFormSchema),
     defaultValues: {
+      fullName: '',
       email: '',
-      password: '',
-      confirmPassword: '',
-      accessCode: '',
+      apiKey: '',
     },
   });
 
   const handleSignUp = async (values: z.infer<typeof SignupFormSchema>) => {
     try {
-      const newUser = await createUserWithEmailAndPassword(values.email, values.password);
-      if (newUser) {
-        toast({
-          title: 'Cuenta creada exitosamente',
-          description: 'Ahora puedes iniciar sesión.',
-        });
-        router.push('/login');
-      } else if (error) {
-        throw error;
-      }
-    } catch (e: any) {
-        const errorMessage = e.code === 'auth/email-already-in-use'
-            ? 'Este correo electrónico ya está en uso.'
-            : 'Ocurrió un error al crear la cuenta.';
+      saveLocalSpecialistProfile({
+        fullName: values.fullName,
+        email: values.email,
+        apiKey: values.apiKey || undefined,
+      });
+      toast({
+        title: 'Perfil creado exitosamente',
+        description: 'Ahora puedes acceder al sistema.',
+      });
+      router.push('/dashboard');
+    } catch (e) {
       toast({
         variant: 'destructive',
         title: 'Error al registrarse',
-        description: errorMessage,
+        description: 'Ocurrió un error al crear el perfil local.',
       });
     }
   };
 
   return (
     <div className="flex h-screen w-full items-center justify-center bg-background px-4">
-      {TEMPORARY_AUTH_BYPASS ? (
-        <Card className="w-full max-w-sm">
-          <CardHeader>
-            <CardTitle className="text-2xl">Registro desactivado temporalmente</CardTitle>
-            <CardDescription>
-              El registro se deshabilitó mientras se corrige la configuración del proveedor de autenticación.
-            </CardDescription>
-          </CardHeader>
-          <CardFooter>
-            <Button className="w-full" onClick={() => router.push('/dashboard')}>
-              Continuar al panel
-            </Button>
-          </CardFooter>
-        </Card>
-      ) : (
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle className="text-2xl">Crear Cuenta</CardTitle>
+          <CardTitle className="text-2xl">Crear Perfil</CardTitle>
           <CardDescription>
-            Ingresa tus datos para registrarte.
+            Ingresa tus datos para registrarte en el sistema local.
           </CardDescription>
         </CardHeader>
         <Form {...form}>
@@ -116,12 +84,12 @@ export default function SignupPage() {
                 <CardContent className="grid gap-4">
                     <FormField
                         control={form.control}
-                        name="accessCode"
+                        name="fullName"
                         render={({ field }) => (
                             <FormItem>
-                            <FormLabel>Código de Institución</FormLabel>
+                            <FormLabel>Nombre Completo</FormLabel>
                             <FormControl>
-                                <Input type="password" placeholder="Código proporcionado por dirección" {...field} />
+                                <Input placeholder="Dr. Juan Pérez" {...field} />
                             </FormControl>
                             <FormMessage />
                             </FormItem>
@@ -142,25 +110,12 @@ export default function SignupPage() {
                     />
                      <FormField
                         control={form.control}
-                        name="password"
+                        name="apiKey"
                         render={({ field }) => (
                             <FormItem>
-                            <FormLabel>Contraseña</FormLabel>
+                            <FormLabel>API Key de IA (opcional)</FormLabel>
                             <FormControl>
-                                <Input type="password" placeholder="Mínimo 6 caracteres" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                            </FormItem>
-                        )}
-                    />
-                    <FormField
-                        control={form.control}
-                        name="confirmPassword"
-                        render={({ field }) => (
-                            <FormItem>
-                            <FormLabel>Confirmar Contraseña</FormLabel>
-                            <FormControl>
-                                <Input type="password" {...field} />
+                                <Input type="password" placeholder="Tu clave API de Gemini" {...field} />
                             </FormControl>
                             <FormMessage />
                             </FormItem>
@@ -168,8 +123,8 @@ export default function SignupPage() {
                     />
                 </CardContent>
                 <CardFooter className="flex flex-col gap-4">
-                    <Button type="submit" className="w-full" disabled={loading}>
-                        {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
+                    <Button type="submit" className="w-full">
+                        <UserPlus className="mr-2 h-4 w-4" />
                         Registrarse
                     </Button>
                      <div className="text-center text-sm">
@@ -182,7 +137,6 @@ export default function SignupPage() {
             </form>
         </Form>
       </Card>
-      )}
     </div>
   );
 }

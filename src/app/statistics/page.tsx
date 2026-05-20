@@ -21,7 +21,7 @@ import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useData } from '@/hooks/use-data';
-import { analyzeStudentRisk } from '@/lib/risk-analysis';
+import { analyzeStudentRiskFull } from '@/lib/risk-analysis';
 import type { Student, PartialId, CalculatedRisk, AttendanceRecord, ParticipationRecord, EvaluationCriteria, RecoveryGrade, RecoveryGrades } from '@/lib/placeholder-data';
 import { getPartialLabel } from '@/lib/utils';
 import {
@@ -87,12 +87,12 @@ export default function StatisticsPage() {
 
       return activeGroup.students.map(student => {
           // Usamos el análisis avanzado real para obtener valores precisos
-          const analysis = analyzeStudentRisk(
+          const analysis = analyzeStudentRiskFull({
               student,
               partialData,
-              activeGroup.criteria || [],
+              criteria: activeGroup.criteria || [],
               totalClasses
-          );
+          });
           
           return {
               studentName: student.name,
@@ -138,7 +138,7 @@ export default function StatisticsPage() {
             // To be consistent with the charts, let's use the basic one for distribution or better yet, map from riskAnalysis if possible.
             // However, riskAnalysis is a separate memo. Let's stick to the basic one for the pie chart or recalculate.
             // Actually, let's use analyzeStudentRisk here too for consistency.
-            const analysis = analyzeStudentRisk(student, partialData, activeGroup.criteria || [], Object.keys(attendance).length);
+            const analysis = analyzeStudentRiskFull({ student, partialData, criteria: activeGroup.criteria || [], totalClasses: Object.keys(attendance).length });
             riskDistribution[analysis.riskLevel]++;
 
             // Participation Stats
@@ -204,8 +204,8 @@ export default function StatisticsPage() {
     const riskScatterData = useMemo(() => {
         return riskAnalysis.map(r => ({
             name: r.studentName,
-            attendance: parseFloat(r.currentAttendance.toFixed(1)),
-            grade: parseFloat(r.projectedGrade.toFixed(1)),
+            attendance: parseFloat((r.currentAttendance ?? 100).toFixed(1)),
+            grade: parseFloat((r.projectedGrade ?? 0).toFixed(1)),
             risk: r.riskLevel,
             fill: r.riskLevel === 'high' ? 'hsl(var(--destructive))' : r.riskLevel === 'medium' ? 'hsl(var(--chart-4))' : 'hsl(var(--chart-2))'
         }));
